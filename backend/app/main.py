@@ -110,3 +110,19 @@ def delete_user(user_id: int, session: Session = Depends(get_session)):
     session.commit()
 
     return {"message": "User account deleted successfully"}
+
+
+@app.post('/change-password')
+def change_password(request: schemas.changepassword, db: Session = Depends(get_session)):
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found")
+    
+    if not verify_password(request.old_password, user.password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid old password")
+    
+    encrypted_password = get_hashed_password(request.new_password)
+    user.password = encrypted_password
+    db.commit()
+    
+    return {"message": "Password changed successfully"}
