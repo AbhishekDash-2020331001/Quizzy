@@ -5,7 +5,7 @@ import logging
 from ..models.schemas import (
     PDFUploadRequest, PDFUploadResponse, PDFUploadQueuedResponse, JobStatusResponse,
     ChatRequest, ChatResponse,
-    QuizRequest, QuizResponse
+    QuizRequest, QuizResponse, QuizQueuedResponse
 )
 from ..services.pdf_service import PDFService
 from ..services.vector_service import VectorService
@@ -190,13 +190,16 @@ async def get_queue_info():
         logger.error(f"Error getting queue info: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get queue info: {str(e)}")
 
-@router.post("/generate-quiz", response_model=QuizResponse)
+@router.post("/generate-quiz", response_model=QuizQueuedResponse)
 async def generate_quiz(request: QuizRequest):
-    """Generate quiz based on specified parameters"""
+    """Queue quiz generation based on specified parameters"""
     try:
         # Validate request
         if not request.pdf_ids:
             raise HTTPException(status_code=400, detail="At least one PDF ID is required")
+        
+        if not request.exam_id:
+            raise HTTPException(status_code=400, detail="exam_id is required for queued quiz generation")
         
         if request.quiz_type.value == "topic" and not request.topic:
             raise HTTPException(status_code=400, detail="Topic is required for topic-based quiz")
@@ -231,7 +234,51 @@ async def generate_quiz(request: QuizRequest):
         if request.num_questions < 1 or request.num_questions > 20:
             raise HTTPException(status_code=400, detail="Number of questions must be between 1 and 20")
         
-        logger.info(f"Generating {request.quiz_type.value} quiz with {request.num_questions} questions")
+        if not queue_enabled or queue_service is None:
+            # Fallback to synchronous processing if queue is not available
+            return await _generate_quiz_sync(request)
+        
+        quiz_id = str(uuid.uuid4())
+        logger.info(f"Queueing quiz generation with ID: {quiz_id} for exam_id: {request.exam_id}")
+        
+        # Prepare quiz data for queue
+        quiz_data = {
+            "quiz_type": request.quiz_type.value,
+            "pdf_ids": request.pdf_ids,
+            "topic": request.topic,
+            "page_start": request.page_start,
+            "page_end": request.page_end,
+            "num_questions": request.num_questions,
+            "difficulty": request.difficulty,
+            "exam_id": request.exam_id,
+            "quiz_id": quiz_id
+        }
+        
+        # Enqueue the processing task
+        job_id = queue_service.enqueue_quiz_processing(quiz_data)
+        
+        logger.info(f"Successfully queued quiz generation {quiz_id} with job ID: {job_id}")
+        
+        return QuizQueuedResponse(
+            job_id=job_id,
+            quiz_id=quiz_id,
+            message="Quiz generation queued for processing",
+            exam_id=request.exam_id,
+            status="queued"
+        )
+        
+    except ValueError as e:
+        logger.error(f"Validation error in quiz generation: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error queueing quiz generation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue quiz generation: {str(e)}")
+
+async def _generate_quiz_sync(request: QuizRequest) -> QuizQueuedResponse:
+    """Fallback synchronous quiz generation when queue is not available"""
+    try:
+        quiz_id = str(uuid.uuid4())
+        logger.info(f"Processing quiz generation synchronously with ID: {quiz_id}")
         
         questions = await rag_service.generate_quiz(
             quiz_type=request.quiz_type,
@@ -243,27 +290,20 @@ async def generate_quiz(request: QuizRequest):
             difficulty=request.difficulty
         )
         
-        quiz_id = str(uuid.uuid4())
+        logger.info(f"Successfully generated quiz {quiz_id} with {len(questions)} questions (sync mode)")
         
-        logger.info(f"Successfully generated quiz {quiz_id} with {len(questions)} questions")
-        
-        return QuizResponse(
+        # Return in the queued format but mark as completed
+        return QuizQueuedResponse(
+            job_id="sync-" + quiz_id,  # Fake job ID for sync processing
             quiz_id=quiz_id,
-            questions=questions,
-            metadata={
-                "quiz_type": request.quiz_type.value,
-                "num_questions": len(questions),
-                "difficulty": request.difficulty,
-                "topic": request.topic,
-                "pdf_count": len(request.pdf_ids)
-            }
+            message="Quiz generated successfully (synchronous mode)",
+            exam_id=request.exam_id,
+            status="completed"
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error generating quiz: {e}")
-        raise HTTPException(status_code=500, detail=f"Quiz generation failed: {str(e)}")
+        logger.error(f"Error in synchronous quiz generation: {e}")
+        raise
 
 @router.get("/list")
 async def list_stored_pdfs():

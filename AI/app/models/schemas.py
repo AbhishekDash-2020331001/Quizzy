@@ -31,6 +31,7 @@ class QuizRequest(BaseModel):
     page_end: Optional[int] = None
     num_questions: int = 5
     difficulty: Optional[str] = "medium"
+    exam_id: Optional[int] = None
 
 class QuizResponse(BaseModel):
     quiz_id: str
@@ -48,6 +49,13 @@ class PDFUploadQueuedResponse(BaseModel):
     pdf_id: str
     message: str
     upload_id: int
+    status: str = "queued"
+
+class QuizQueuedResponse(BaseModel):
+    job_id: str
+    quiz_id: str
+    message: str
+    exam_id: int
     status: str = "queued"
 
 class JobStatusResponse(BaseModel):

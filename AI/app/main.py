@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import pdf_router
+from .routers import pdf_router, webhook_router
 import os
 import logging
 from dotenv import load_dotenv
@@ -36,6 +36,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(pdf_router.router)
+app.include_router(webhook_router.router)
 
 @app.get("/")
 async def root():
@@ -43,13 +44,23 @@ async def root():
     return {
         "message": "RAG Quiz System API",
         "version": "1.0.0",
-        "description": "Upload PDFs via uploadthing URLs, chat with them, and generate quizzes",
+        "description": "Upload PDFs via uploadthing URLs, chat with them, and generate quizzes with background processing",
         "endpoints": {
             "docs": "/docs",
             "health": "/health",
             "pdf_upload": "/pdf/upload",
             "pdf_chat": "/pdf/chat",
-            "generate_quiz": "/pdf/generate-quiz"
+            "generate_quiz": "/pdf/generate-quiz",
+            "job_status": "/pdf/job/{job_id}/status",
+            "queue_info": "/pdf/queue/info",
+            "pdf_webhook": "/webhook/upload-processed/{upload_id}",
+            "quiz_webhook": "/webhook/quiz-generated/{exam_id}"
+        },
+        "features": {
+            "queue_processing": "PDF uploads and quiz generation are processed in background queues",
+            "webhook_notifications": "Automatic webhook notifications when processing completes",
+            "job_monitoring": "Track status of queued jobs",
+            "quiz_generation": "Generate quizzes asynchronously with exam_id tracking"
         }
     }
 
@@ -65,12 +76,24 @@ async def health_check():
                 "error": "OpenAI API key not configured"
             }
         
+        # Check queue service status
+        queue_status = "not_configured"
+        try:
+            from .services.queue_service import QueueService
+            queue_service = QueueService()
+            queue_info = queue_service.get_queue_info()
+            queue_status = "operational"
+        except Exception as e:
+            logger.warning(f"Queue service check failed: {e}")
+            queue_status = "unavailable"
+        
         return {
             "status": "healthy",
             "message": "RAG Quiz System is running",
             "services": {
                 "api": "operational",
-                "openai_configured": bool(openai_key)
+                "openai_configured": bool(openai_key),
+                "queue_service": queue_status
             }
         }
     except Exception as e:
