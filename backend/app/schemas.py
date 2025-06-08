@@ -172,3 +172,34 @@ class QuestionEditData(BaseModel):
     option_4: str
     correct_answer: Literal['1', '2', '3', '4']
     explanation: str
+
+
+
+# ----- Takes Schemas -----
+class TakeCreate(BaseModel):
+    device_id: str
+
+
+class TakeUpdate(BaseModel):
+    correct_answers: Optional[int] = None
+
+class TakeResponse(BaseModel):
+    id: int
+    exam_id: int
+    user_id: int
+    correct_answers: Optional[int]
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class TakeExamResponse(BaseModel):
+    message: str
+    takes_id: int
+    exam_id: int
+    exam: ExamInfoResponse
+    questions: List[QuestionPublicResponse]
+
+    class Config:
+        from_attributes = True

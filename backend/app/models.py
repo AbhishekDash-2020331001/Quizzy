@@ -14,6 +14,7 @@ class User(Base):
     
     exams = relationship("Exam", back_populates="creator", cascade="all, delete")
     uploads = relationship("Uploads", back_populates="uploader", cascade="all, delete")
+    takes = relationship("Takes", back_populates="user", cascade="all, delete") 
 
 
 
@@ -63,6 +64,7 @@ class Exam(Base):
 
     creator = relationship("User", back_populates="exams")
     questions = relationship("Question", back_populates="exam", cascade="all, delete")
+    takers = relationship("Takes", back_populates="exam", cascade="all, delete")
 
 
 class Question(Base):
@@ -80,3 +82,18 @@ class Question(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     exam = relationship("Exam", back_populates="questions")
+
+
+
+class Takes(Base):
+    __tablename__ = 'takes'
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("exam.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    correct_answers = Column(Integer)
+    device_id = Column(String(450))
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+
+    exam = relationship("Exam", back_populates="takers")
+    user = relationship("User", back_populates="takes")
