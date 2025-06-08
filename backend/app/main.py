@@ -334,6 +334,117 @@ def read_exam(exam_id: int = Path(...), session: Session = Depends(get_session))
     
     return exam_response
 
+@app.put("/exams/{exam_id}", dependencies=[Depends(JWTBearer())])
+def update_exam(
+    exam_id: int, 
+    exam_update: schemas.ExamUpdate, 
+    session: Session = Depends(get_session),
+    user_id: int = Depends(get_current_user_id)
+):
+    exam = session.query(models.Exam).filter(
+        models.Exam.id == exam_id, 
+        models.Exam.deleted_at == None
+    ).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    # Check if user owns this exam or is authorized to edit it
+    if exam.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this exam")
+    
+    # Validate time constraints - cannot set times earlier than current time
+    current_time = datetime.utcnow()
+    if exam_update.start_time and exam_update.start_time < current_time:
+        raise HTTPException(status_code=400, detail="Start time cannot be earlier than current time")
+    if exam_update.end_time and exam_update.end_time < current_time:
+        raise HTTPException(status_code=400, detail="End time cannot be earlier than current time")
+    
+    # Validate that end_time is after start_time
+    start_time = exam_update.start_time or exam.start_time
+    end_time = exam_update.end_time or exam.end_time
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+    
+    # Update exam fields
+    for field, value in exam_update.dict(exclude_unset=True, exclude={'questions'}).items():
+        if value is not None:
+            setattr(exam, field, value)
+    
+    # Handle questions if provided
+    if exam_update.questions is not None:
+        # Get all existing questions for this exam
+        existing_questions = session.query(models.Question).filter(
+            models.Question.exam_id == exam_id,
+            models.Question.deleted_at == None
+        ).all()
+        
+        existing_question_ids = {q.id for q in existing_questions}
+        updated_question_ids = set()
+        
+        for question_data in exam_update.questions:
+            if question_data.id is None:
+                # New question - create it
+                new_question = models.Question(
+                    exam_id=exam_id,
+                    text=question_data.text,
+                    option_1=question_data.option_1,
+                    option_2=question_data.option_2,
+                    option_3=question_data.option_3,
+                    option_4=question_data.option_4,
+                    correct_answer=question_data.correct_answer,
+                    explanation=question_data.explanation,
+                    created_at=datetime.utcnow()
+                )
+                session.add(new_question)
+            else:
+                # Existing question - update it
+                question = session.query(models.Question).filter(
+                    models.Question.id == question_data.id,
+                    models.Question.exam_id == exam_id,
+                    models.Question.deleted_at == None
+                ).first()
+                
+                if not question:
+                    raise HTTPException(status_code=404, detail=f"Question with ID {question_data.id} not found")
+                
+                # Update question fields
+                question.text = question_data.text
+                question.option_1 = question_data.option_1
+                question.option_2 = question_data.option_2
+                question.option_3 = question_data.option_3
+                question.option_4 = question_data.option_4
+                question.correct_answer = question_data.correct_answer
+                question.explanation = question_data.explanation
+                
+                updated_question_ids.add(question_data.id)
+        
+        # Soft delete questions that were not included in the update
+        questions_to_delete = existing_question_ids - updated_question_ids
+        for question_id in questions_to_delete:
+            question_to_delete = session.query(models.Question).filter(
+                models.Question.id == question_id
+            ).first()
+            if question_to_delete:
+                question_to_delete.deleted_at = datetime.utcnow()
+        
+        # Update questions_count based on the number of questions provided
+        exam.questions_count = len(exam_update.questions)
+    
+    session.commit()
+    session.refresh(exam)
+    
+    return {"message": "Exam updated successfully", "exam_id": exam.id}
+
+@app.delete("/exams/{exam_id}", dependencies=[Depends(JWTBearer())])
+def delete_exam(exam_id: int, session: Session = Depends(get_session)):
+    exam = session.query(models.Exam).filter(models.Exam.id == exam_id).first()
+    if not exam or exam.deleted_at:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    exam.deleted_at = datetime.utcnow()
+    session.commit()
+    return {"message": "Exam deleted"}
+
+
 
 
 @app.post("/uploads", dependencies=[Depends(JWTBearer())])
