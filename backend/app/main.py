@@ -515,4 +515,133 @@ def upload_processing_callback(
     
     return {"message": "Upload processing data updated successfully"}
 
+@app.post("/webhook/quiz-generated/{exam_id}")
+def quiz_generation_callback(
+    exam_id: int,
+    callback_data: schemas.QuizGenerationCallback,
+    session: Session = Depends(get_session)
+):
+    """Webhook endpoint for the processing server to send back generated questions"""
+    exam = session.query(models.Exam).filter(
+        models.Exam.id == exam_id,
+        models.Exam.deleted_at.is_(None)
+    ).first()
+    
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    # Helper function to find correct answer index
+    def find_correct_answer_index(options: List[str], correct_answer: str) -> str:
+        for i, option in enumerate(options):
+            if option.strip() == correct_answer.strip():
+                return str(i + 1)
+        # If no exact match found, try to match without letter prefix (A), B), etc.)
+        correct_text = correct_answer.strip()
+        if len(correct_text) > 3 and correct_text[1:3] == ') ':
+            correct_text = correct_text[3:].strip()
+        
+        for i, option in enumerate(options):
+            option_text = option.strip()
+            if len(option_text) > 3 and option_text[1:3] == ') ':
+                option_text = option_text[3:].strip()
+            if option_text == correct_text:
+                return str(i + 1)
+        
+        # Default to option 1 if no match found
+        return "1"
+    
+    # Create questions from the callback data
+    for q in callback_data.questions:
+        if len(q.options) != 4:
+            continue  # Skip if not exactly 4 options
+            
+        correct_answer_index = find_correct_answer_index(q.options, q.correct_answer)
+        
+        new_question = models.Question(
+            exam_id=exam_id,
+            text=q.question,
+            option_1=q.options[0],
+            option_2=q.options[1],
+            option_3=q.options[2],
+            option_4=q.options[3],
+            correct_answer=correct_answer_index,
+            explanation=q.explanation,
+            created_at=datetime.utcnow()
+        )
+        session.add(new_question)
+    
+    # Update exam processing state to completed
+    exam.processing_state = 1
+    session.commit()
+    
+    return {"message": f"Quiz questions generated and added to exam {exam_id}"}
 
+@app.post("/questions", dependencies=[Depends(JWTBearer())])
+def create_questions(
+    payload: schemas.QuestionsCreateRequest,
+    session: Session = Depends(get_session)
+):
+    exam = session.query(models.Exam).filter(models.Exam.id == payload.exam_id).first()
+
+    if not exam or exam.deleted_at:
+        raise HTTPException(status_code=404, detail="Exam not found")
+
+    for q in payload.questions:
+        new_question = models.Question(
+            exam_id=payload.exam_id,
+            text=q.text,
+            option_1=q.option_1,
+            option_2=q.option_2,
+            option_3=q.option_3,
+            option_4=q.option_4,
+            correct_answer=q.correct_answer,
+            explanation=q.explanation,
+            created_at=datetime.utcnow()
+        )
+        session.add(new_question)
+
+    session.commit()
+
+    return {"message": f"{len(payload.questions)} questions added to exam {payload.exam_id}"}
+
+
+@app.get("/questions/{question_id}", dependencies=[Depends(JWTBearer())])
+def read_question(question_id: int, session: Session = Depends(get_session)):
+    question = session.query(models.Question).filter(models.Question.id == question_id, models.Question.deleted_at == None).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return question
+
+@app.get("/exams/{exam_id}/questions", response_model=List[schemas.QuestionResponse], dependencies=[Depends(JWTBearer())])
+def get_exam_questions(exam_id: int, session: Session = Depends(get_session)):
+    """Get all questions for a specific exam"""
+    exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    questions = session.query(models.Question).filter(
+        models.Question.exam_id == exam_id,
+        models.Question.deleted_at == None
+    ).all()
+    
+    return questions
+
+@app.put("/questions/{question_id}", dependencies=[Depends(JWTBearer())])
+def update_question(question_id: int, question_update: schemas.QuestionUpdate, session: Session = Depends(get_session)):
+    question = session.query(models.Question).filter(models.Question.id == question_id).first()
+    if not question or question.deleted_at:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    for field, value in question_update.dict(exclude_unset=True).items():
+        setattr(question, field, value)
+    session.commit()
+    return {"message": "Question updated"}
+
+@app.delete("/questions/{question_id}", dependencies=[Depends(JWTBearer())])
+def delete_question(question_id: int, session: Session = Depends(get_session)):
+    question = session.query(models.Question).filter(models.Question.id == question_id).first()
+    if not question or question.deleted_at:
+        raise HTTPException(status_code=404, detail="Question not found")
+    question.deleted_at = datetime.utcnow()
+    session.commit()
+    return {"message": "Question deleted"}
