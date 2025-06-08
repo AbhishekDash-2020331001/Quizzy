@@ -54,6 +54,25 @@ def get_current_user_id(token: str = Depends(JWTBearer())):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def send_to_processing_server(uploadthing_url: str, pdf_name: str, upload_id: int):
+    """Send upload details to the processing server"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://localhost:8001/pdf/upload",
+                json={
+                    "uploadthing_url": uploadthing_url,
+                    "pdf_name": pdf_name,
+                    "upload_id": upload_id  # Include upload_id so the other server can reference it
+                },
+                timeout=10.0
+            )
+            response.raise_for_status()
+    except Exception as e:
+        # Log the error but don't raise it to avoid blocking the upload creation
+        print(f"Error sending to processing server: {e}")
+
+
 @app.post("/register")
 def register_user(user: schemas.UserCreate, session: Session = Depends(get_session)):
     existing_user = session.query(models.User).filter_by(email=user.email).first()
@@ -136,8 +155,8 @@ async def create_upload(upload: schemas.UploadCreate, session: Session = Depends
     session.add(new_upload)
     session.commit()
     session.refresh(new_upload)
-    
-    
+    # Send request to processing server in background
+    asyncio.create_task(send_to_processing_server(upload.url, upload.pdf_name, new_upload.id))
     
     return {"message": "Upload created", "upload_id": new_upload.id}
 
@@ -170,3 +189,29 @@ def delete_upload(upload_id: int, session: Session = Depends(get_session)):
     upload.deleted_at = datetime.utcnow()
     session.commit()
     return {"message": "Upload deleted"}
+
+
+
+@app.post("/webhook/upload-processed/{upload_id}")
+def upload_processing_callback(
+    upload_id: int, 
+    callback_data: schemas.UploadProcessingCallback, 
+    session: Session = Depends(get_session)
+):
+    """Webhook endpoint for the processing server to send back pdf_id and total_pages"""
+    upload = session.query(models.Uploads).filter(
+        models.Uploads.id == upload_id,
+        models.Uploads.deleted_at.is_(None)
+    ).first()
+    
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    # Update the upload record with processing results
+    upload.pdf_id = callback_data.pdf_id
+    upload.pages = callback_data.total_pages
+    upload.processing_state = 1  # Mark as processed
+    
+    session.commit()
+    
+    return {"message": "Upload processing data updated successfully"}
