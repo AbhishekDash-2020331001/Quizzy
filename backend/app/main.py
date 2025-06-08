@@ -232,6 +232,109 @@ async def create_exam(
 
     return {"message": "Exam created", "exam": new_exam.id}
 
+@app.get("/exams", response_model=List[schemas.ExamResponse], dependencies=[Depends(JWTBearer())])
+def get_exams(session: Session = Depends(get_session)):
+    exams = session.query(models.Exam).order_by(models.Exam.created_at.desc()).filter(models.Exam.deleted_at == None).all()
+    
+    exam_responses = []
+    for exam in exams:        
+        # Count participants (unique users who took this exam)
+        participants_count = session.query(models.Takes).filter(
+            models.Takes.exam_id == exam.id,
+            models.Takes.deleted_at.is_(None)
+        ).count()
+        
+        # Get full upload objects
+        uploads = [schemas.UploadResponse(
+            id=upload.id,
+            user_id=upload.user_id,
+            url=upload.url,
+            processing_state=upload.processing_state,
+            pdf_id=upload.pdf_id,
+            pages=upload.pages,
+            pdf_name=upload.pdf_name,
+            created_at=upload.created_at,
+            deleted_at=upload.deleted_at
+        ) for upload in exam.uploads if upload.deleted_at is None]
+        
+        exam_response = schemas.ExamResponse(
+            id=exam.id,
+            user_id=exam.user_id,
+            name=exam.name,
+            retake=exam.retake,
+            uploads=uploads,
+            start_time=exam.start_time,
+            end_time=exam.end_time,
+            quiz_type=exam.quiz_type,
+            topic=exam.topic,
+            start_page=exam.start_page,
+            end_page=exam.end_page,
+            processing_state=exam.processing_state,
+            created_at=exam.created_at,
+            deleted_at=exam.deleted_at,
+            questions_count=exam.questions_count,
+            participants_count=participants_count,
+            quiz_difficulty=exam.quiz_difficulty
+        )
+        exam_responses.append(exam_response)
+    
+    return exam_responses
+
+@app.get("/exams/{exam_id}", response_model=schemas.ExamDetailResponse, dependencies=[Depends(JWTBearer())])
+def read_exam(exam_id: int = Path(...), session: Session = Depends(get_session)):
+    exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    # Count participants (unique users who took this exam)
+    participants_count = session.query(models.Takes).filter(
+        models.Takes.exam_id == exam.id,
+        models.Takes.deleted_at.is_(None)
+    ).count()
+    
+    # Get full upload objects (filter out soft-deleted uploads)
+    uploads = [schemas.UploadResponse(
+        id=upload.id,
+        user_id=upload.user_id,
+        url=upload.url,
+        processing_state=upload.processing_state,
+        pdf_id=upload.pdf_id,
+        pages=upload.pages,
+        pdf_name=upload.pdf_name,
+        created_at=upload.created_at,
+        deleted_at=upload.deleted_at
+    ) for upload in exam.uploads if upload.deleted_at is None]
+    
+    # Get questions without correct answers and explanations
+    questions = session.query(models.Question).filter(
+        models.Question.exam_id == exam_id,
+        models.Question.deleted_at == None
+    ).all()
+    
+    exam_response = schemas.ExamDetailResponse(
+        id=exam.id,
+        user_id=exam.user_id,
+        name=exam.name,
+        retake=exam.retake,
+        uploads=uploads,
+        questions=questions,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        quiz_type=exam.quiz_type,
+        topic=exam.topic,
+        start_page=exam.start_page,
+        end_page=exam.end_page,
+        processing_state=exam.processing_state,
+        created_at=exam.created_at,
+        deleted_at=exam.deleted_at,
+        questions_count=exam.questions_count,
+        participants_count=participants_count,
+        quiz_difficulty=exam.quiz_difficulty
+    )
+    
+    return exam_response
+
+
 
 @app.post("/uploads", dependencies=[Depends(JWTBearer())])
 async def create_upload(upload: schemas.UploadCreate, session: Session = Depends(get_session), user_id: int = Depends(get_current_user_id)):
