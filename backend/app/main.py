@@ -72,6 +72,26 @@ async def send_to_processing_server(uploadthing_url: str, pdf_name: str, upload_
         # Log the error but don't raise it to avoid blocking the upload creation
         print(f"Error sending to processing server: {e}")
 
+async def send_exam_to_processing_server(exam_id: int, quiz_type: str, pdf_ids: List[str], topic: str, num_questions: int, difficulty: str):
+    """Send exam details to the processing server for quiz generation"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://localhost:8001/pdf/generate-quiz",
+                json={
+                    "exam_id": exam_id,  # Include exam_id so the other server can reference it
+                    "quiz_type": quiz_type,
+                    "pdf_ids": pdf_ids,
+                    "topic": topic,
+                    "num_questions": num_questions,
+                    "difficulty": difficulty
+                },
+                timeout=30.0  # Longer timeout for quiz generation
+            )
+            response.raise_for_status()
+    except Exception as e:
+        # Log the error but don't raise it to avoid blocking the exam creation
+        print(f"Error sending exam to processing server: {e}")
 
 @app.post("/register")
 def register_user(user: schemas.UserCreate, session: Session = Depends(get_session)):
@@ -146,6 +166,71 @@ def change_password(request: schemas.changepassword, db: Session = Depends(get_s
     
     return {"message": "Password changed successfully"}
 
+@app.post("/exams", dependencies=[Depends(JWTBearer())])
+async def create_exam(
+    exam: schemas.ExamCreate, 
+    session: Session = Depends(get_session), 
+    user_id: int = Depends(get_current_user_id)
+):
+    if exam.quiz_type == "topic" and not exam.topic:
+        raise HTTPException(status_code=400, detail="Topic is required for topic-based exams")
+    if exam.quiz_type == "page_range" and (not exam.start_page or not exam.end_page):
+        raise HTTPException(status_code=400, detail="Start page and end page are required for page range-based exams")
+    
+
+    uploads = session.query(models.Uploads).filter(
+        models.Uploads.id.in_(exam.upload_ids),
+        models.Uploads.deleted_at.is_(None)  # Filter out soft-deleted uploads
+    ).all()
+    
+    if not uploads or len(uploads) != len(exam.upload_ids):
+        raise HTTPException(status_code=404, detail="One or more uploads not found or already deleted")
+
+    # Check if all uploads have been processed (have pdf_id)
+    for upload in uploads:
+        if not upload.pdf_id:
+            raise HTTPException(status_code=400, detail=f"Upload {upload.id} has not been processed yet")
+
+    new_exam = models.Exam(
+        user_id=user_id,
+        retake=exam.retake,
+        name=exam.name,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        quiz_type=exam.quiz_type,
+        topic=exam.topic,
+        start_page=exam.start_page,
+        end_page=exam.end_page,
+        quiz_difficulty=exam.quiz_difficulty,
+        questions_count=exam.questions_count,
+        processing_state=0
+    )
+    new_exam.uploads = uploads
+
+    session.add(new_exam)
+    session.commit()
+    session.refresh(new_exam)
+
+    # Prepare data for processing server
+    pdf_ids = [upload.pdf_id for upload in uploads]
+    
+    # Determine quiz_type for processing server
+    if len(uploads) > 1:
+        processing_quiz_type = "multi_pdf_topic"
+    else:
+        processing_quiz_type = exam.quiz_type
+    
+    # Send request to processing server in background
+    asyncio.create_task(send_exam_to_processing_server(
+        exam_id=new_exam.id,
+        quiz_type=processing_quiz_type,
+        pdf_ids=pdf_ids,
+        topic=exam.topic or "",  # Provide empty string if None
+        num_questions=exam.questions_count,
+        difficulty=exam.quiz_difficulty
+    ))
+
+    return {"message": "Exam created", "exam": new_exam.id}
 
 
 @app.post("/uploads", dependencies=[Depends(JWTBearer())])
@@ -215,3 +300,5 @@ def upload_processing_callback(
     session.commit()
     
     return {"message": "Upload processing data updated successfully"}
+
+
