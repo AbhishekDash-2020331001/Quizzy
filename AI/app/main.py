@@ -50,6 +50,7 @@ async def root():
             "health": "/health",
             "pdf_upload": "/pdf/upload",
             "pdf_chat": "/pdf/chat",
+            "pdf_chat_stream": "/pdf/chat/stream",
             "generate_quiz": "/pdf/generate-quiz",
             "job_status": "/pdf/job/{job_id}/status",
             "queue_info": "/pdf/queue/info",

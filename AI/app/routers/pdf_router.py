@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from typing import Dict, List
 import uuid
 import logging
+import json
 from ..models.schemas import (
     PDFUploadRequest, PDFUploadResponse, PDFUploadQueuedResponse, JobStatusResponse,
     ChatRequest, ChatResponse,
@@ -138,6 +140,59 @@ async def chat_with_pdfs(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in chat with PDFs {request.pdf_ids}: {e}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+@router.post("/chat/stream")
+async def chat_with_pdfs_stream(request: ChatRequest):
+    """Stream chat with one or multiple PDFs using RAG"""
+    try:
+        if not request.message.strip():
+            raise HTTPException(status_code=400, detail="Message cannot be empty")
+        
+        if not request.pdf_ids:
+            raise HTTPException(status_code=400, detail="At least one PDF ID is required")
+        
+        # Validate that all PDFs exist
+        for pdf_id in request.pdf_ids:
+            pdf_info = vector_service.get_pdf_info(pdf_id)
+            if not pdf_info:
+                raise HTTPException(status_code=404, detail=f"PDF with ID {pdf_id} not found")
+        
+        pdf_count = len(request.pdf_ids)
+        logger.info(f"Processing streaming chat request for {pdf_count} PDF{'s' if pdf_count > 1 else ''}: {request.pdf_ids}")
+        
+        async def generate_stream():
+            try:
+                async for chunk in rag_service.chat_with_pdfs_stream(
+                    request.pdf_ids,
+                    request.message,
+                    request.conversation_history
+                ):
+                    # Format as Server-Sent Events
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    
+            except Exception as e:
+                logger.error(f"Error in streaming chat: {e}")
+                error_chunk = {
+                    "type": "error",
+                    "data": f"Streaming error: {str(e)}"
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/plain; charset=utf-8"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting up streaming chat with PDFs {request.pdf_ids}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to setup streaming chat: {str(e)}")
 
 @router.get("/job/{job_id}/status", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
