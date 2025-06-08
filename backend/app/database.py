@@ -8,3 +8,5 @@ URL_DATABASE = 'mysql+pymysql://root:123321@localhost:3306/BlogApplication'
 engine = create_engine(URL_DATABASE, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+

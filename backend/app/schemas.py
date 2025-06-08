@@ -39,3 +39,30 @@ class changepassword(BaseModel):
     email:str
     old_password:str
     new_password:str
+
+
+# ----- Uploads Schemas -----
+class UploadCreate(BaseModel):
+    url: str
+    pdf_name: str
+
+class UploadUpdate(BaseModel):
+    url: Optional[str] = None
+
+class UploadProcessingCallback(BaseModel):
+    pdf_id: str
+    total_pages: int
+
+class UploadResponse(BaseModel):
+    id: int
+    user_id: int
+    url: str
+    processing_state: int
+    pdf_id: Optional[str] = None
+    pages: Optional[int] = None
+    pdf_name: Optional[str] = None
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -19,7 +19,7 @@ import uvicorn
 import httpx
 import asyncio
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 10800
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 ALGORITHM = "HS256"
 JWT_SECRET_KEY = "narscbjim@$@&^@&%^&RFghgjvbdsha"
@@ -126,3 +126,47 @@ def change_password(request: schemas.changepassword, db: Session = Depends(get_s
     db.commit()
     
     return {"message": "Password changed successfully"}
+
+
+
+@app.post("/uploads", dependencies=[Depends(JWTBearer())])
+async def create_upload(upload: schemas.UploadCreate, session: Session = Depends(get_session), user_id: int = Depends(get_current_user_id)):
+    # Create the upload record in database
+    new_upload = models.Uploads(user_id=user_id, url=upload.url, pdf_name=upload.pdf_name, processing_state=0)
+    session.add(new_upload)
+    session.commit()
+    session.refresh(new_upload)
+    
+    
+    
+    return {"message": "Upload created", "upload_id": new_upload.id}
+
+@app.get("/uploads/myuploads", response_model=List[schemas.UploadResponse], dependencies=[Depends(JWTBearer())])
+def get_my_uploads(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    uploads = session.query(models.Uploads).filter(
+        models.Uploads.user_id == user_id,
+        models.Uploads.deleted_at == None
+    ).order_by(models.Uploads.created_at.desc()).all()
+    return uploads
+
+@app.put("/uploads/{upload_id}", dependencies=[Depends(JWTBearer())])
+def update_upload(upload_id: int, upload_update: schemas.UploadUpdate, session: Session = Depends(get_session)):
+    upload = session.query(models.Uploads).filter(models.Uploads.id == upload_id).first()
+    if not upload or upload.deleted_at:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    upload.url = upload_update.url or upload.url
+    session.commit()
+    return {"message": "Upload updated"}
+
+@app.delete("/uploads/{upload_id}", dependencies=[Depends(JWTBearer())])
+def delete_upload(upload_id: int, session: Session = Depends(get_session)):
+    upload = session.query(models.Uploads).filter(models.Uploads.id == upload_id).first()
+    if not upload or upload.deleted_at:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    upload.deleted_at = datetime.utcnow()
+    session.commit()
+    return {"message": "Upload deleted"}
