@@ -138,3 +138,37 @@ class UploadResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ----- Question Schemas -----
+class QuestionCreate(BaseModel):
+    text: str
+    option_1: Optional[str]
+    option_2: Optional[str]
+    option_3: Optional[str]
+    option_4: Optional[str]
+    correct_answer: Literal['1', '2', '3', '4']
+    explanation: Optional[str]
+
+class QuestionsCreateRequest(BaseModel):
+    exam_id: int
+    questions: List[QuestionCreate]
+
+class QuestionUpdate(BaseModel):
+    text: Optional[str] = None
+    option_1: Optional[str] = None
+    option_2: Optional[str] = None
+    option_3: Optional[str] = None
+    option_4: Optional[str] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+
+class QuestionEditData(BaseModel):
+    id: Optional[int] = None  # None for new questions, actual ID for existing questions
+    text: str
+    option_1: str
+    option_2: str
+    option_3: str
+    option_4: str
+    correct_answer: Literal['1', '2', '3', '4']
+    explanation: str

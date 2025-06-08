@@ -62,3 +62,21 @@ class Exam(Base):
     questions_count = Column(Integer,nullable=False)
 
     creator = relationship("User", back_populates="exams")
+    questions = relationship("Question", back_populates="exam", cascade="all, delete")
+
+
+class Question(Base):
+    __tablename__ = 'question'
+    id = Column(Integer, primary_key=True, index=True)
+    exam_id = Column(Integer, ForeignKey("exam.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    option_1 = Column(Text)
+    option_2 = Column(Text)
+    option_3 = Column(Text)
+    option_4 = Column(Text)
+    correct_answer = Column(Enum('1', '2', '3', '4'), nullable=False)
+    explanation = Column(Text)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+
+    exam = relationship("Exam", back_populates="questions")
