@@ -41,6 +41,78 @@ class changepassword(BaseModel):
     new_password:str
 
 
+# ----- Exam Schemas -----
+class ExamCreate(BaseModel):
+    name: str
+    retake: Optional[bool] = False
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    quiz_type: Literal["topic", "page_range"]
+    upload_ids: List[int]
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    quiz_difficulty: Optional[str] = None
+    questions_count: int
+
+class ExamResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    retake: bool
+    uploads: List['UploadResponse']
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    quiz_type: Literal["topic", "page_range"]
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    processing_state: int
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+    questions_count: int
+    participants_count: int
+    quiz_difficulty: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class ExamPublicResponse(BaseModel):
+    id: int
+    name: str
+    retake: bool
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class ExamDetailResponse(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    retake: bool
+    uploads: List['UploadResponse']
+    questions: List['QuestionResponse']
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    quiz_type: Literal["topic", "page_range"]
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    processing_state: int
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+    questions_count: int
+    participants_count: int
+    quiz_difficulty: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+
+
 # ----- Uploads Schemas -----
 class UploadCreate(BaseModel):
     url: str

@@ -11,10 +11,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)
     teacher = Column(Boolean, default=False)
-
+    
+    exams = relationship("Exam", back_populates="creator", cascade="all, delete")
     uploads = relationship("Uploads", back_populates="uploader", cascade="all, delete")
-
-
 
 
 
@@ -41,3 +40,25 @@ class Uploads(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     uploader = relationship("User", back_populates="uploads")
+
+
+class Exam(Base):
+    __tablename__ = 'exam'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
+    retake = Column(Boolean, default=False)
+    name = Column(String(450), nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    quiz_type = Column(Enum("topic", "page_range"), nullable=False)
+    topic = Column(String(450), nullable=True)
+    start_page = Column(Integer, nullable=True)
+    end_page = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+    processing_state = Column(Integer, default=0)
+    quiz_difficulty = Column(Enum("easy", "medium", "hard"), nullable=True, default="medium")
+    questions_count = Column(Integer,nullable=False)
+
+    creator = relationship("User", back_populates="exams")
