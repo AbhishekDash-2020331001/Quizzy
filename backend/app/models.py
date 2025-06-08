@@ -27,6 +27,12 @@ class TokenTable(Base):
     status = Column(Boolean)
     created_date = Column(DateTime, default=datetime.datetime.now)
 
+exam_upload_association = Table(
+    'exam_upload_association',
+    Base.metadata,
+    Column('exam_id', Integer, ForeignKey('exam.id', ondelete='CASCADE'), primary_key=True),
+    Column('upload_id', Integer, ForeignKey('uploads.id', ondelete='CASCADE'), primary_key=True)
+)
 
 class Uploads(Base):
     __tablename__ = 'uploads'
@@ -41,6 +47,8 @@ class Uploads(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     uploader = relationship("User", back_populates="uploads")
+    exams = relationship("Exam", secondary=exam_upload_association, back_populates="uploads")
+
 
 
 class Exam(Base):
@@ -63,6 +71,7 @@ class Exam(Base):
     questions_count = Column(Integer,nullable=False)
 
     creator = relationship("User", back_populates="exams")
+    uploads = relationship("Uploads", secondary=exam_upload_association, back_populates="exams")
     questions = relationship("Question", back_populates="exam", cascade="all, delete")
     takers = relationship("Takes", back_populates="exam", cascade="all, delete")
 

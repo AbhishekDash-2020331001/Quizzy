@@ -111,7 +111,34 @@ class ExamDetailResponse(BaseModel):
         from_attributes = True
 
 
+class ExamInfoResponse(BaseModel):
+    id: int
+    name: str
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    quiz_type: Literal["topic", "page_range"]
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    quiz_difficulty: Optional[str] = None
+    questions_count: int
+    retake: bool
 
+    class Config:
+        from_attributes = True
+
+class ExamUpdate(BaseModel):
+    name: Optional[str] = None
+    retake: Optional[bool] = None
+    start_time: Optional[datetime.datetime] = None
+    end_time: Optional[datetime.datetime] = None
+    quiz_type: Optional[Literal["topic", "page_range"]] = None
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    quiz_difficulty: Optional[str] = None
+    questions_count: Optional[int] = None
+    questions: Optional[List[QuestionEditData]] = None
 
 # ----- Uploads Schemas -----
 class UploadCreate(BaseModel):
@@ -173,7 +200,35 @@ class QuestionEditData(BaseModel):
     correct_answer: Literal['1', '2', '3', '4']
     explanation: str
 
+class QuestionResponse(BaseModel):
+    id: int
+    exam_id: int
+    text: str
+    option_1: str
+    option_2: str
+    option_3: str
+    option_4: str
+    correct_answer: str
+    explanation: str
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
 
+    class Config:
+        from_attributes = True
+
+class QuestionPublicResponse(BaseModel):
+    id: int
+    exam_id: int
+    text: str
+    option_1: str
+    option_2: str
+    option_3: str
+    option_4: str
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
 
 # ----- Takes Schemas -----
 class TakeCreate(BaseModel):
@@ -203,3 +258,4 @@ class TakeExamResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
