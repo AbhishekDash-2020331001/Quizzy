@@ -259,3 +259,154 @@ class TakeExamResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+# ----- Answers Schemas -----
+class AnswerCreate(BaseModel):
+    question_id: int
+    takes_id: int
+    answer: str
+
+class AnswerUpdate(BaseModel):
+    answer: Optional[str] = None
+
+class AnswerResponse(BaseModel):
+    id: int
+    question_id: int
+    takes_id: int
+    answer: str
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class BulkAnswerItem(BaseModel):
+    question_id: int
+    answer: Literal['1', '2', '3', '4']
+
+class BulkAnswerCreate(BaseModel):
+    takes_id: int
+    answers: List[BulkAnswerItem]
+
+class BulkAnswerResponse(BaseModel):
+    correct_answers: int
+
+class RankingResponse(BaseModel):
+    id: int
+    username: str
+    correct_answers: int
+
+    class Config:
+        from_attributes = True
+
+
+# ----- Answers Schemas -----
+class AnswerCreate(BaseModel):
+    question_id: int
+    takes_id: int
+    answer: str
+
+class AnswerUpdate(BaseModel):
+    answer: Optional[str] = None
+
+class AnswerResponse(BaseModel):
+    id: int
+    question_id: int
+    takes_id: int
+    answer: str
+    created_at: datetime.datetime
+    deleted_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class BulkAnswerItem(BaseModel):
+    question_id: int
+    answer: Literal['1', '2', '3', '4']
+
+class BulkAnswerCreate(BaseModel):
+    takes_id: int
+    answers: List[BulkAnswerItem]
+
+class BulkAnswerResponse(BaseModel):
+    correct_answers: int
+
+class RankingResponse(BaseModel):
+    id: int
+    username: str
+    correct_answers: int
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedQuestion(BaseModel):
+    question: str
+    options: List[str]  # Array of 4 options
+    correct_answer: str  # The correct option text
+    explanation: str
+
+class QuizGenerationCallback(BaseModel):
+    quiz_id: str
+    questions: List[GeneratedQuestion]
+
+class UserTakeDetail(BaseModel):
+    id: int
+    quiz_name: str
+    quiz_difficulty: Optional[str]
+    quiz_type: str
+    quiz_created_at: datetime.datetime
+    correct_answers: Optional[int]
+    ranking: int
+    total_participants: int
+    total_questions: int
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuestionDetailWithAnswer(BaseModel):
+    id: int
+    text: str
+    option_1: str
+    option_2: str
+    option_3: str
+    option_4: str
+    correct_answer: str
+    explanation: str
+    user_answer: Optional[str] = None
+    is_correct: bool
+
+    class Config:
+        from_attributes = True
+
+class ExamDetailForTake(BaseModel):
+    id: int
+    name: str
+    quiz_difficulty: Optional[str]
+    quiz_type: str
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    questions_count: int
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class DetailedTakeResponse(BaseModel):
+    take_id: int
+    exam: ExamDetailForTake
+    user_id: int
+    correct_answers: int
+    total_questions: int
+    score_percentage: float
+    ranking: int
+    total_participants: int
+    questions: List[QuestionDetailWithAnswer]
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
