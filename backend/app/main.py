@@ -960,7 +960,35 @@ def get_dashboard(
         recent_quizzes=recent_quizzes
     )
 
-
+@app.get("/rankings/{exam_id}", response_model=List[schemas.RankingResponse], dependencies=[Depends(JWTBearer())])
+def get_exam_rankings(exam_id: int, session: Session = Depends(get_session)):
+    """Get rankings for a specific exam"""
+    # Verify exam exists
+    exam = session.query(models.Exam).filter(
+        models.Exam.id == exam_id,
+        models.Exam.deleted_at.is_(None)
+    ).first()
+    
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    # Get all users who took this specific exam with their scores
+    rankings = session.query(
+        models.User.id,
+        models.User.username,
+        models.Takes.correct_answers
+    ).join(
+        models.Takes, models.User.id == models.Takes.user_id
+    ).filter(
+        models.Takes.exam_id == exam_id,
+        models.Takes.deleted_at.is_(None),
+        models.User.deleted_at.is_(None),
+        models.Takes.correct_answers.is_not(None)  # Only completed takes
+    ).order_by(
+        models.Takes.correct_answers.desc()
+    ).all()
+    
+    return [schemas.RankingResponse(id=r.id, username=r.username, correct_answers=r.correct_answers) for r in rankings]
 
 @app.get("/dashboard/takes", response_model=schemas.UserDashboardResponse, dependencies=[Depends(JWTBearer())])
 def get_user_takes_dashboard(
@@ -1042,3 +1070,114 @@ def get_user_takes_dashboard(
         best_score=round(best_score, 2),
         takes=takes_details
     )
+
+
+@app.get("/takes/{take_id}/details", response_model=schemas.DetailedTakeResponse, dependencies=[Depends(JWTBearer())])
+def get_take_details(
+    take_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    from datetime import datetime, timedelta 
+    """Get detailed information about a specific take including questions, answers, and results"""
+    
+    # Get the take record and verify it belongs to the current user
+    take = session.query(models.Takes).join(
+        models.Exam, models.Takes.exam_id == models.Exam.id
+    ).filter(
+        models.Takes.id == take_id,
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at.is_(None),
+        models.Exam.deleted_at.is_(None)
+    ).first()
+    
+    if not take:
+        raise HTTPException(status_code=404, detail="Take record not found or does not belong to you")
+    
+    exam = take.exam
+    
+    if datetime.now() < exam.end_time + timedelta(minutes=1):
+        raise HTTPException(status_code=400, detail="The answers are not available yet")
+    
+    # Get all questions for this exam
+    questions = session.query(models.Question).filter(
+        models.Question.exam_id == exam.id,
+        models.Question.deleted_at.is_(None)
+    ).order_by(models.Question.id).all()
+    
+    # Get all user's answers for this take
+    user_answers = session.query(models.Answers).filter(
+        models.Answers.takes_id == take_id,
+        models.Answers.deleted_at.is_(None)
+    ).all()
+    
+    # Create a mapping of question_id to user_answer
+    answers_map = {answer.question_id: answer.answer for answer in user_answers}
+    
+    # Build detailed questions with answers
+    questions_with_answers = []
+    for question in questions:
+        user_answer = answers_map.get(question.id)
+        is_correct = user_answer == question.correct_answer if user_answer else False
+        
+        question_detail = schemas.QuestionDetailWithAnswer(
+            id=question.id,
+            text=question.text,
+            option_1=question.option_1,
+            option_2=question.option_2,
+            option_3=question.option_3,
+            option_4=question.option_4,
+            correct_answer=question.correct_answer,
+            explanation=question.explanation,
+            user_answer=user_answer,
+            is_correct=is_correct
+        )
+        questions_with_answers.append(question_detail)
+    
+    # Calculate score percentage
+    correct_answers = take.correct_answers or 0
+    total_questions = exam.questions_count
+    score_percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0
+    
+    # Get ranking and total participants for this exam
+    all_takes_for_exam = session.query(models.Takes).filter(
+        models.Takes.exam_id == exam.id,
+        models.Takes.deleted_at.is_(None),
+        models.Takes.correct_answers.is_not(None)
+    ).order_by(models.Takes.correct_answers.desc()).all()
+    
+    total_participants = len(all_takes_for_exam)
+    
+    # Find user's ranking (1-based)
+    ranking = 1
+    for idx, exam_take in enumerate(all_takes_for_exam):
+        if exam_take.id == take.id:
+            ranking = idx + 1
+            break
+    
+    # Create exam detail
+    exam_detail = schemas.ExamDetailForTake(
+        id=exam.id,
+        name=exam.name,
+        quiz_difficulty=exam.quiz_difficulty,
+        quiz_type=exam.quiz_type,
+        topic=exam.topic,
+        start_page=exam.start_page,
+        end_page=exam.end_page,
+        questions_count=exam.questions_count,
+        created_at=exam.created_at
+    )
+    
+    return schemas.DetailedTakeResponse(
+        take_id=take.id,
+        exam=exam_detail,
+        user_id=take.user_id,
+        correct_answers=correct_answers,
+        total_questions=total_questions,
+        score_percentage=round(score_percentage, 2),
+        ranking=ranking,
+        total_participants=total_participants,
+        questions=questions_with_answers,
+        created_at=take.created_at
+    )
+
