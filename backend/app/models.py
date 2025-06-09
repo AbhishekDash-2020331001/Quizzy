@@ -17,8 +17,6 @@ class User(Base):
     takes = relationship("Takes", back_populates="user", cascade="all, delete") 
 
 
-
-
 class TokenTable(Base):
     __tablename__ = "token"
     user_id = Column(Integer)
@@ -91,7 +89,7 @@ class Question(Base):
     deleted_at = Column(DateTime, nullable=True)
 
     exam = relationship("Exam", back_populates="questions")
-
+    answers = relationship("Answers", back_populates="question", cascade="all, delete")
 
 
 class Takes(Base):
@@ -106,3 +104,16 @@ class Takes(Base):
 
     exam = relationship("Exam", back_populates="takers")
     user = relationship("User", back_populates="takes")
+    answers = relationship("Answers", back_populates="takes", cascade="all, delete")
+
+class Answers(Base):
+    __tablename__ = 'answers'
+    id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("question.id", ondelete="CASCADE"), nullable=False)
+    takes_id = Column(Integer, ForeignKey("takes.id", ondelete="CASCADE"), nullable=False)
+    answer = Column(Enum('1', '2', '3', '4'))
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+
+    question = relationship("Question", back_populates="answers")
+    takes = relationship("Takes", back_populates="answers")
