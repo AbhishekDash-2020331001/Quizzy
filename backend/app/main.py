@@ -645,3 +645,125 @@ def delete_question(question_id: int, session: Session = Depends(get_session)):
     question.deleted_at = datetime.utcnow()
     session.commit()
     return {"message": "Question deleted"}
+
+
+
+
+@app.post("/take_exam/{exam_id}", response_model=schemas.TakeExamResponse, dependencies=[Depends(JWTBearer())])
+def take_exam(
+    exam_id: int,
+    take_create: schemas.TakeCreate,
+    session: Session = Depends(get_session),
+    user_id: int = Depends(get_current_user_id)
+):
+    # Check if exam exists
+    exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    elif not take_create.device_id:
+        raise HTTPException(status_code=400, detail="Device ID is required")
+
+    # Check if exam is active
+    if exam.start_time > datetime.now() or exam.end_time < datetime.now():
+        raise HTTPException(status_code=400, detail="Exam is not active")
+
+
+    # Check if user already took this exam
+    previous_attempt = session.query(models.Takes).filter(
+        models.Takes.exam_id == exam_id,
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at == None
+    ).first()
+
+    if previous_attempt and not exam.retake:
+        raise HTTPException(status_code=400, detail="You have already taken this exam and retakes are not allowed")
+
+    # Check if user is from different device
+    if previous_attempt and previous_attempt.device_id != take_create.device_id:
+        raise HTTPException(status_code=400, detail="You are using a different device from the one you used to take the exam")
+    
+    # Create a new attempt
+    new_take = models.Takes(
+        exam_id=exam_id,
+        user_id=user_id,
+        correct_answers=0,
+        device_id=take_create.device_id,
+        created_at=datetime.utcnow()
+    )
+    session.add(new_take)
+    session.commit()
+    session.refresh(new_take)
+
+    # Get exam info
+    exam_info = schemas.ExamInfoResponse(
+        id=exam.id,
+        name=exam.name,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        quiz_type=exam.quiz_type,
+        topic=exam.topic,
+        start_page=exam.start_page,
+        end_page=exam.end_page,
+        quiz_difficulty=exam.quiz_difficulty,
+        questions_count=exam.questions_count,
+        retake=exam.retake
+    )
+
+    # Get questions without correct answers and explanations
+    questions = session.query(models.Question).filter(
+        models.Question.exam_id == exam_id,
+        models.Question.deleted_at == None
+    ).all()
+    
+    questions_public = [schemas.QuestionPublicResponse(
+        id=question.id,
+        exam_id=question.exam_id,
+        text=question.text,
+        option_1=question.option_1,
+        option_2=question.option_2,
+        option_3=question.option_3,
+        option_4=question.option_4,
+        created_at=question.created_at,
+        deleted_at=question.deleted_at
+    ) for question in questions]
+
+    return schemas.TakeExamResponse(
+        message="Exam started",
+        takes_id=new_take.id,
+        exam_id=exam_id,
+        exam=exam_info,
+        questions=questions_public
+    )
+
+@app.get("/takes/me", response_model=List[schemas.TakeResponse])
+def get_my_takes(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+    ):
+    takes = session.query(models.Takes).filter(
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at == None
+    ).all()
+    return takes
+
+@app.put("/takes/{take_id}", dependencies=[Depends(JWTBearer())])
+def update_take(take_id: int, take_update: schemas.TakeUpdate, session: Session = Depends(get_session)):
+    take = session.query(models.Takes).filter(models.Takes.id == take_id).first()
+    if not take or take.deleted_at:
+        raise HTTPException(status_code=404, detail="Take record not found")
+
+    for field, value in take_update.dict(exclude_unset=True).items():
+        setattr(take, field, value)
+    session.commit()
+    return {"message": "Take record updated"}
+
+@app.delete("/takes/{take_id}", dependencies=[Depends(JWTBearer())])
+def delete_take(take_id: int, session: Session = Depends(get_session)):
+    take = session.query(models.Takes).filter(models.Takes.id == take_id).first()
+    if not take or take.deleted_at:
+        raise HTTPException(status_code=404, detail="Take record not found")
+    take.deleted_at = datetime.utcnow()
+    session.commit()
+    return {"message": "Take record deleted"}
+
+
