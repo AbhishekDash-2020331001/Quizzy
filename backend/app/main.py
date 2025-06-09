@@ -72,7 +72,7 @@ async def send_to_processing_server(uploadthing_url: str, pdf_name: str, upload_
         # Log the error but don't raise it to avoid blocking the upload creation
         print(f"Error sending to processing server: {e}")
 
-async def send_exam_to_processing_server(exam_id: int, quiz_type: str, pdf_ids: List[str], topic: str, num_questions: int, difficulty: str):
+async def send_exam_to_processing_server(exam_id: int, quiz_type: str, pdf_ids: List[str], topic: str, num_questions: int, difficulty: str, start_page: int, end_page: int):
     """Send exam details to the processing server for quiz generation"""
     try:
         async with httpx.AsyncClient() as client:
@@ -84,7 +84,9 @@ async def send_exam_to_processing_server(exam_id: int, quiz_type: str, pdf_ids: 
                     "pdf_ids": pdf_ids,
                     "topic": topic,
                     "num_questions": num_questions,
-                    "difficulty": difficulty
+                    "difficulty": difficulty,
+                    "page_start": start_page,
+                    "page_end": end_page
                 },
                 timeout=30.0  # Longer timeout for quiz generation
             )
@@ -226,6 +228,8 @@ async def create_exam(
         quiz_type=processing_quiz_type,
         pdf_ids=pdf_ids,
         topic=exam.topic or "",  # Provide empty string if None
+        start_page=exam.start_page or None,
+        end_page=exam.end_page or None,
         num_questions=exam.questions_count,
         difficulty=exam.quiz_difficulty
     ))
@@ -233,8 +237,8 @@ async def create_exam(
     return {"message": "Exam created", "exam": new_exam.id}
 
 @app.get("/exams", response_model=List[schemas.ExamResponse], dependencies=[Depends(JWTBearer())])
-def get_exams(session: Session = Depends(get_session)):
-    exams = session.query(models.Exam).order_by(models.Exam.created_at.desc()).filter(models.Exam.deleted_at == None).all()
+def get_exams(user_id: int = Depends(get_current_user_id),session: Session = Depends(get_session)):
+    exams = session.query(models.Exam).order_by(models.Exam.created_at.desc()).filter(models.Exam.deleted_at == None, models.Exam.user_id == user_id).all()
     
     exam_responses = []
     for exam in exams:        
