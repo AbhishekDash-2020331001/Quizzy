@@ -4,6 +4,7 @@ from . import models
 from . import database
 from fastapi import FastAPI, Depends, HTTPException, status, Path
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from passlib.context import CryptContext
 from .database import Base, engine, SessionLocal
 from .auth_bearer import JWTBearer
@@ -52,7 +53,6 @@ def get_current_user_id(token: str = Depends(JWTBearer())):
         return user_id
     except (JWTError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token")
-
 
 async def send_to_processing_server(uploadthing_url: str, pdf_name: str, upload_id: int):
     """Send upload details to the processing server"""
@@ -334,6 +334,8 @@ def read_exam(exam_id: int = Path(...), session: Session = Depends(get_session))
     
     return exam_response
 
+
+
 @app.put("/exams/{exam_id}", dependencies=[Depends(JWTBearer())])
 def update_exam(
     exam_id: int, 
@@ -446,7 +448,6 @@ def delete_exam(exam_id: int, session: Session = Depends(get_session)):
 
 
 
-
 @app.post("/uploads", dependencies=[Depends(JWTBearer())])
 async def create_upload(upload: schemas.UploadCreate, session: Session = Depends(get_session), user_id: int = Depends(get_current_user_id)):
     # Create the upload record in database
@@ -454,6 +455,7 @@ async def create_upload(upload: schemas.UploadCreate, session: Session = Depends
     session.add(new_upload)
     session.commit()
     session.refresh(new_upload)
+
     # Send request to processing server in background
     asyncio.create_task(send_to_processing_server(upload.url, upload.pdf_name, new_upload.id))
     
@@ -488,8 +490,6 @@ def delete_upload(upload_id: int, session: Session = Depends(get_session)):
     upload.deleted_at = datetime.utcnow()
     session.commit()
     return {"message": "Upload deleted"}
-
-
 
 @app.post("/webhook/upload-processed/{upload_id}")
 def upload_processing_callback(
@@ -665,7 +665,6 @@ def get_exam_info(exam_id: int, session: Session = Depends(get_session)):
     
     return exam_info
 
-
 @app.post("/take_exam/{exam_id}", response_model=schemas.TakeExamResponse, dependencies=[Depends(JWTBearer())])
 def take_exam(
     exam_id: int,
@@ -782,6 +781,7 @@ def delete_take(take_id: int, session: Session = Depends(get_session)):
     take.deleted_at = datetime.utcnow()
     session.commit()
     return {"message": "Take record deleted"}
+
 
 
 @app.post("/answers", dependencies=[Depends(JWTBearer())])
@@ -1071,7 +1071,6 @@ def get_user_takes_dashboard(
         takes=takes_details
     )
 
-
 @app.get("/takes/{take_id}/details", response_model=schemas.DetailedTakeResponse, dependencies=[Depends(JWTBearer())])
 def get_take_details(
     take_id: int,
@@ -1180,7 +1179,6 @@ def get_take_details(
         questions=questions_with_answers,
         created_at=take.created_at
     )
-
 
 @app.get("/exams/{exam_id}/analytics", response_model=schemas.ExamAnalyticsResponse, dependencies=[Depends(JWTBearer())])
 def get_exam_analytics(
@@ -1377,4 +1375,297 @@ def get_exam_analytics(
         question_analytics=question_analytics_data,
         score_distribution=score_distribution_data,
         daily_participants=daily_participants_data
+    )
+
+@app.get("/analytics/user", response_model=schemas.UserOverallAnalyticsResponse, dependencies=[Depends(JWTBearer())])
+def get_user_overall_analytics(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get comprehensive analytics for the current user's overall performance"""
+    from collections import defaultdict, Counter
+    import statistics
+    from datetime import timedelta
+    
+    # Get user info
+    user = session.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get all user's takes with exam information
+    user_takes = session.query(models.Takes).join(
+        models.Exam, models.Takes.exam_id == models.Exam.id
+    ).filter(
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at.is_(None),
+        models.Exam.deleted_at.is_(None),
+        models.Takes.correct_answers.is_not(None)  # Only completed exams
+    ).all()
+    
+    if not user_takes:
+        # Return empty analytics for users with no exam history
+        return schemas.UserOverallAnalyticsResponse(
+            user_id=user_id,
+            username=user.username,
+            activity_summary=schemas.ActivitySummary(
+                total_exams_taken=0,
+                total_questions_answered=0,
+                total_correct_answers=0,
+                overall_accuracy=0,
+                active_days=0,
+                streak_current=0,
+                streak_longest=0
+            ),
+            overall_average_score=0,
+            subject_performance=[],
+            difficulty_performance=[],
+            performance_trends=[],
+            monthly_progress=[],
+            comparison_stats=schemas.ComparisonStats(
+                user_average=0,
+                global_average=0,
+                percentile_rank=0,
+                better_than_percentage=0
+            ),
+            strengths_weaknesses=[],
+            recent_exams=[]
+        )
+    
+    # Calculate activity summary
+    total_exams_taken = len(user_takes)
+    total_questions_answered = sum(take.exam.questions_count for take in user_takes)
+    total_correct_answers = sum(take.correct_answers for take in user_takes)
+    overall_accuracy = (total_correct_answers / total_questions_answered * 100) if total_questions_answered > 0 else 0
+    
+    # Calculate active days and streaks
+    take_dates = sorted([take.created_at.date() for take in user_takes])
+    unique_active_days = len(set(take_dates))
+    
+    # Calculate current and longest streaks
+    streak_current = 0
+    streak_longest = 0
+    current_streak = 0
+    
+    if take_dates:
+        # Check current streak from today backwards
+        today = datetime.now().date()
+        current_date = today
+        
+        for i in range(30):  # Check last 30 days
+            if current_date in take_dates:
+                streak_current += 1
+                current_date -= timedelta(days=1)
+            else:
+                break
+        
+        # Calculate longest streak
+        for i in range(len(take_dates)):
+            if i == 0 or (take_dates[i] - take_dates[i-1]).days == 1:
+                current_streak += 1
+                streak_longest = max(streak_longest, current_streak)
+            else:
+                current_streak = 1
+    
+    activity_summary = schemas.ActivitySummary(
+        total_exams_taken=total_exams_taken,
+        total_questions_answered=total_questions_answered,
+        total_correct_answers=total_correct_answers,
+        overall_accuracy=round(overall_accuracy, 2),
+        active_days=unique_active_days,
+        streak_current=streak_current,
+        streak_longest=streak_longest
+    )
+    
+    # Calculate overall average score
+    scores = [(take.correct_answers / take.exam.questions_count * 100) for take in user_takes]
+    overall_average_score = statistics.mean(scores) if scores else 0
+    
+    # Subject performance analysis
+    subject_data = defaultdict(list)
+    for take in user_takes:
+        exam = take.exam
+        subject = exam.topic if exam.topic else exam.quiz_type
+        score = (take.correct_answers / exam.questions_count * 100)
+        subject_data[subject].append({
+            'score': score,
+            'date': take.created_at.date()
+        })
+    
+    subject_performances = []
+    for subject, data in subject_data.items():
+        scores = [d['score'] for d in data]
+        dates = [d['date'] for d in data]
+        
+        # Calculate improvement trend
+        if len(scores) >= 3:
+            recent_avg = statistics.mean(scores[-3:])
+            early_avg = statistics.mean(scores[:3])
+            if recent_avg > early_avg + 5:
+                trend = "improving"
+            elif recent_avg < early_avg - 5:
+                trend = "declining"
+            else:
+                trend = "stable"
+        else:
+            trend = "insufficient_data"
+        
+        subject_performances.append(schemas.SubjectPerformance(
+            subject=subject,
+            exams_taken=len(scores),
+            average_score=round(statistics.mean(scores), 2),
+            best_score=round(max(scores), 2),
+            worst_score=round(min(scores), 2),
+            improvement_trend=trend
+        ))
+    
+    # Difficulty performance analysis
+    difficulty_data = defaultdict(list)
+    for take in user_takes:
+        difficulty = take.exam.quiz_difficulty or "medium"
+        score = (take.correct_answers / take.exam.questions_count * 100)
+        difficulty_data[difficulty].append(score)
+    
+    difficulty_performances = []
+    for difficulty, scores in difficulty_data.items():
+        avg_score = statistics.mean(scores)
+        success_rate = len([s for s in scores if s >= 60]) / len(scores) * 100  # 60% as pass threshold
+        
+        difficulty_performances.append(schemas.DifficultyPerformance(
+            difficulty=difficulty,
+            exams_taken=len(scores),
+            average_score=round(avg_score, 2),
+            success_rate=round(success_rate, 2)
+        ))
+    
+    # Performance trends (last 20 exams or all if less than 20)
+    recent_takes = sorted(user_takes, key=lambda x: x.created_at)[-20:]
+    performance_trends = []
+    for take in recent_takes:
+        score = (take.correct_answers / take.exam.questions_count * 100)
+        performance_trends.append(schemas.PerformanceTrend(
+            date=take.created_at.strftime("%Y-%m-%d"),
+            score=round(score, 2),
+            exam_name=take.exam.name,
+            exam_id=take.exam.id
+        ))
+    
+    # Monthly progress (last 12 months)
+    monthly_data = defaultdict(list)
+    for take in user_takes:
+        month_key = take.created_at.strftime("%Y-%m")
+        score = (take.correct_answers / take.exam.questions_count * 100)
+        monthly_data[month_key].append(score)
+    
+    monthly_progress = []
+    for month, scores in sorted(monthly_data.items())[-12:]:  # Last 12 months
+        monthly_progress.append({
+            "month": month,
+            "average_score": round(statistics.mean(scores), 2),
+            "exams_count": len(scores)
+        })
+    
+    # Comparative statistics
+    # Get global average (all users)
+    all_takes = session.query(models.Takes).join(
+        models.Exam, models.Takes.exam_id == models.Exam.id
+    ).filter(
+        models.Takes.deleted_at.is_(None),
+        models.Exam.deleted_at.is_(None),
+        models.Takes.correct_answers.is_not(None)
+    ).all()
+    
+    if all_takes:
+        global_scores = [(take.correct_answers / take.exam.questions_count * 100) for take in all_takes]
+        global_average = statistics.mean(global_scores)
+        
+        # Calculate percentile rank
+        user_avg = overall_average_score
+        better_count = len([s for s in global_scores if s < user_avg])
+        percentile_rank = (better_count / len(global_scores) * 100) if global_scores else 0
+        better_than_percentage = percentile_rank
+    else:
+        global_average = 0
+        percentile_rank = 0
+        better_than_percentage = 0
+    
+    comparison_stats = schemas.ComparisonStats(
+        user_average=round(overall_average_score, 2),
+        global_average=round(global_average, 2),
+        percentile_rank=round(percentile_rank, 2),
+        better_than_percentage=round(better_than_percentage, 2)
+    )
+    
+    # Strengths and weaknesses analysis
+    strengths_weaknesses = []
+    subject_avg_scores = [(perf.subject, perf.average_score, perf.exams_taken) for perf in subject_performances]
+    subject_avg_scores.sort(key=lambda x: x[1], reverse=True)
+    
+    # Top 2 subjects as strengths (if score > overall average)
+    for i, (subject, avg_score, count) in enumerate(subject_avg_scores[:2]):
+        if avg_score > overall_average_score:
+            strengths_weaknesses.append(schemas.StrengthWeakness(
+                category="strength",
+                subject=subject,
+                average_score=round(avg_score, 2),
+                exams_count=count,
+                description=f"Strong performance with {avg_score:.1f}% average score"
+            ))
+    
+    # Bottom 2 subjects as weaknesses (if score < overall average)
+    for i, (subject, avg_score, count) in enumerate(subject_avg_scores[-2:]):
+        if avg_score < overall_average_score:
+            strengths_weaknesses.append(schemas.StrengthWeakness(
+                category="weakness",
+                subject=subject,
+                average_score=round(avg_score, 2),
+                exams_count=count,
+                description=f"Room for improvement with {avg_score:.1f}% average score"
+            ))
+    
+    # Recent exams (last 10)
+    recent_exam_takes = sorted(user_takes, key=lambda x: x.created_at, reverse=True)[:10]
+    recent_exams = []
+    
+    for take in recent_exam_takes:
+        exam = take.exam
+        
+        # Get ranking for this exam
+        all_takes_for_exam = session.query(models.Takes).filter(
+            models.Takes.exam_id == exam.id,
+            models.Takes.deleted_at.is_(None),
+            models.Takes.correct_answers.is_not(None)
+        ).order_by(models.Takes.correct_answers.desc()).all()
+        
+        ranking = 1
+        for idx, exam_take in enumerate(all_takes_for_exam):
+            if exam_take.id == take.id:
+                ranking = idx + 1
+                break
+        
+        recent_exams.append(schemas.UserTakeDetail(
+            id=take.id,
+            quiz_name=exam.name,
+            quiz_difficulty=exam.quiz_difficulty,
+            quiz_type=exam.quiz_type,
+            quiz_created_at=exam.created_at,
+            correct_answers=take.correct_answers,
+            ranking=ranking,
+            total_participants=len(all_takes_for_exam),
+            total_questions=exam.questions_count,
+            start_time=exam.start_time,
+            end_time=exam.end_time
+        ))
+    
+    return schemas.UserOverallAnalyticsResponse(
+        user_id=user_id,
+        username=user.username,
+        activity_summary=activity_summary,
+        overall_average_score=round(overall_average_score, 2),
+        subject_performance=subject_performances,
+        difficulty_performance=difficulty_performances,
+        performance_trends=performance_trends,
+        monthly_progress=monthly_progress,
+        comparison_stats=comparison_stats,
+        strengths_weaknesses=strengths_weaknesses,
+        recent_exams=recent_exams
     )

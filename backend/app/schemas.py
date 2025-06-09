@@ -300,45 +300,6 @@ class RankingResponse(BaseModel):
         from_attributes = True
 
 
-# ----- Answers Schemas -----
-class AnswerCreate(BaseModel):
-    question_id: int
-    takes_id: int
-    answer: str
-
-class AnswerUpdate(BaseModel):
-    answer: Optional[str] = None
-
-class AnswerResponse(BaseModel):
-    id: int
-    question_id: int
-    takes_id: int
-    answer: str
-    created_at: datetime.datetime
-    deleted_at: Optional[datetime.datetime] = None
-
-    class Config:
-        from_attributes = True
-
-class BulkAnswerItem(BaseModel):
-    question_id: int
-    answer: Literal['1', '2', '3', '4']
-
-class BulkAnswerCreate(BaseModel):
-    takes_id: int
-    answers: List[BulkAnswerItem]
-
-class BulkAnswerResponse(BaseModel):
-    correct_answers: int
-
-class RankingResponse(BaseModel):
-    id: int
-    username: str
-    correct_answers: int
-
-    class Config:
-        from_attributes = True
-
 
 class GeneratedQuestion(BaseModel):
     question: str
@@ -499,6 +460,77 @@ class ExamAnalyticsResponse(BaseModel):
     
     # Time-based Analytics
     daily_participants: List[dict]  # {"date": "2024-01-15", "count": 5}
+    
+    class Config:
+        from_attributes = True
+
+
+class SubjectPerformance(BaseModel):
+    subject: str
+    exams_taken: int
+    average_score: float
+    best_score: float
+    worst_score: float
+    improvement_trend: str  # "improving", "declining", "stable"
+
+class DifficultyPerformance(BaseModel):
+    difficulty: str
+    exams_taken: int
+    average_score: float
+    success_rate: float
+
+class PerformanceTrend(BaseModel):
+    date: str
+    score: float
+    exam_name: str
+    exam_id: int
+
+class ComparisonStats(BaseModel):
+    user_average: float
+    global_average: float
+    percentile_rank: float
+    better_than_percentage: float
+
+class StrengthWeakness(BaseModel):
+    category: str  # "strength" or "weakness"
+    subject: str
+    average_score: float
+    exams_count: int
+    description: str
+
+class ActivitySummary(BaseModel):
+    total_exams_taken: int
+    total_questions_answered: int
+    total_correct_answers: int
+    overall_accuracy: float
+    active_days: int
+    streak_current: int
+    streak_longest: int
+
+class UserOverallAnalyticsResponse(BaseModel):
+    user_id: int
+    username: str
+    
+    # Overall Performance
+    activity_summary: ActivitySummary
+    overall_average_score: float
+    
+    # Performance by Categories
+    subject_performance: List[SubjectPerformance]
+    difficulty_performance: List[DifficultyPerformance]
+    
+    # Trends and Progress
+    performance_trends: List[PerformanceTrend]
+    monthly_progress: List[dict]  # {"month": "2024-01", "average_score": 75.5, "exams_count": 5}
+    
+    # Comparative Analytics
+    comparison_stats: ComparisonStats
+    
+    # Insights
+    strengths_weaknesses: List[StrengthWeakness]
+    
+    # Recent Activity
+    recent_exams: List[UserTakeDetail]
     
     class Config:
         from_attributes = True
