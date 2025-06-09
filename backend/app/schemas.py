@@ -432,3 +432,73 @@ class UserDashboardResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ParticipantAnalytics(BaseModel):
+    user_id: int
+    username: str
+    correct_answers: int
+    total_questions: int
+    score_percentage: float
+    ranking: int
+    time_taken: Optional[str] = None
+    completed_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class QuestionAnalytics(BaseModel):
+    question_id: int
+    question_text: str
+    total_attempts: int
+    correct_attempts: int
+    success_rate: float
+    option_1_count: int
+    option_2_count: int
+    option_3_count: int
+    option_4_count: int
+    correct_option: str
+
+    class Config:
+        from_attributes = True
+
+class ScoreDistribution(BaseModel):
+    score_range: str  # e.g., "0-20", "21-40", etc.
+    count: int
+    percentage: float
+
+class ExamAnalyticsResponse(BaseModel):
+    exam_id: int
+    exam_name: str
+    exam_creator: str
+    quiz_type: str
+    quiz_difficulty: Optional[str]
+    topic: Optional[str] = None
+    start_page: Optional[int] = None
+    end_page: Optional[int] = None
+    questions_count: int
+    created_at: datetime.datetime
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    
+    # Participation Statistics
+    total_participants: int
+    total_completed: int
+    completion_rate: float
+    
+    # Score Statistics
+    average_score: float
+    median_score: float
+    highest_score: float
+    lowest_score: float
+    std_deviation: float
+    
+    # Detailed Data
+    participants: List[ParticipantAnalytics]
+    question_analytics: List[QuestionAnalytics]
+    score_distribution: List[ScoreDistribution]
+    
+    # Time-based Analytics
+    daily_participants: List[dict]  # {"date": "2024-01-15", "count": 5}
+    
+    class Config:
+        from_attributes = True

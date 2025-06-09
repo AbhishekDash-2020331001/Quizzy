@@ -1181,3 +1181,200 @@ def get_take_details(
         created_at=take.created_at
     )
 
+
+@app.get("/exams/{exam_id}/analytics", response_model=schemas.ExamAnalyticsResponse, dependencies=[Depends(JWTBearer())])
+def get_exam_analytics(
+    exam_id: int,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get comprehensive analytics for an exam (only accessible by exam creator)"""
+    from collections import Counter
+    import statistics
+    from datetime import timedelta
+    
+    # Get the exam and verify user is the creator
+    exam = session.query(models.Exam).filter(
+        models.Exam.id == exam_id,
+        models.Exam.user_id == user_id,
+        models.Exam.deleted_at.is_(None)
+    ).first()
+    
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found or you don't have permission to view its analytics")
+    
+    # Get exam creator info
+    creator = session.query(models.User).filter(models.User.id == exam.user_id).first()
+    
+    # Get all takes for this exam
+    takes = session.query(models.Takes).join(
+        models.User, models.Takes.user_id == models.User.id
+    ).filter(
+        models.Takes.exam_id == exam_id,
+        models.Takes.deleted_at.is_(None),
+        models.User.deleted_at.is_(None)
+    ).all()
+    
+    # Get completed takes (those with correct_answers populated)
+    completed_takes = [take for take in takes if take.correct_answers is not None]
+    
+    total_participants = len(takes)
+    total_completed = len(completed_takes)
+    completion_rate = (total_completed / total_participants * 100) if total_participants > 0 else 0
+    
+    # Calculate score statistics
+    if completed_takes:
+        scores = [(take.correct_answers / exam.questions_count * 100) for take in completed_takes]
+        average_score = statistics.mean(scores)
+        median_score = statistics.median(scores)
+        highest_score = max(scores)
+        lowest_score = min(scores)
+        std_deviation = statistics.stdev(scores) if len(scores) > 1 else 0
+    else:
+        average_score = median_score = highest_score = lowest_score = std_deviation = 0
+    
+    # Create participants analytics with ranking
+    participants_data = []
+    completed_takes_sorted = sorted(completed_takes, key=lambda x: x.correct_answers, reverse=True)
+    
+    for idx, take in enumerate(completed_takes_sorted):
+        score_percentage = (take.correct_answers / exam.questions_count * 100) if exam.questions_count > 0 else 0
+        
+        participant = schemas.ParticipantAnalytics(
+            user_id=take.user_id,
+            username=take.user.username,
+            correct_answers=take.correct_answers,
+            total_questions=exam.questions_count,
+            score_percentage=round(score_percentage, 2),
+            ranking=idx + 1,
+            completed_at=take.created_at
+        )
+        participants_data.append(participant)
+    
+    # Get all questions for this exam
+    questions = session.query(models.Question).filter(
+        models.Question.exam_id == exam_id,
+        models.Question.deleted_at.is_(None)
+    ).order_by(models.Question.id).all()
+    
+    # Get question analytics
+    question_analytics_data = []
+    for question in questions:
+        # Get all answers for this question
+        answers = session.query(models.Answers).join(
+            models.Takes, models.Answers.takes_id == models.Takes.id
+        ).filter(
+            models.Answers.question_id == question.id,
+            models.Takes.exam_id == exam_id,
+            models.Answers.deleted_at.is_(None),
+            models.Takes.deleted_at.is_(None)
+        ).all()
+        
+        total_attempts = len(answers)
+        correct_attempts = len([a for a in answers if a.answer == question.correct_answer])
+        success_rate = (correct_attempts / total_attempts * 100) if total_attempts > 0 else 0
+        
+        # Count answers for each option
+        answer_counts = Counter([a.answer for a in answers])
+        option_1_count = answer_counts.get('1', 0)
+        option_2_count = answer_counts.get('2', 0)
+        option_3_count = answer_counts.get('3', 0)
+        option_4_count = answer_counts.get('4', 0)
+        
+        question_analytics = schemas.QuestionAnalytics(
+            question_id=question.id,
+            question_text=question.text[:100] + "..." if len(question.text) > 100 else question.text,
+            total_attempts=total_attempts,
+            correct_attempts=correct_attempts,
+            success_rate=round(success_rate, 2),
+            option_1_count=option_1_count,
+            option_2_count=option_2_count,
+            option_3_count=option_3_count,
+            option_4_count=option_4_count,
+            correct_option=question.correct_answer
+        )
+        question_analytics_data.append(question_analytics)
+    
+    # Create score distribution (0-20, 21-40, 41-60, 61-80, 81-100)
+    score_ranges = ["0-20", "21-40", "41-60", "61-80", "81-100"]
+    score_distribution_data = []
+    
+    if completed_takes:
+        scores = [(take.correct_answers / exam.questions_count * 100) for take in completed_takes]
+        
+        for score_range in score_ranges:
+            range_parts = score_range.split('-')
+            min_score = int(range_parts[0])
+            max_score = int(range_parts[1])
+            
+            count = len([s for s in scores if min_score <= s <= max_score])
+            percentage = (count / len(scores) * 100) if len(scores) > 0 else 0
+            
+            score_distribution_data.append(schemas.ScoreDistribution(
+                score_range=score_range,
+                count=count,
+                percentage=round(percentage, 2)
+            ))
+    else:
+        for score_range in score_ranges:
+            score_distribution_data.append(schemas.ScoreDistribution(
+                score_range=score_range,
+                count=0,
+                percentage=0
+            ))
+    
+    # Daily participants analytics (last 30 days or since exam creation)
+    daily_participants_data = []
+    if takes:
+        # Get date range
+        start_date = max(exam.created_at.date(), (datetime.now() - timedelta(days=30)).date())
+        current_date = start_date
+        end_date = datetime.now().date()
+        
+        # Count participants by date
+        takes_by_date = {}
+        for take in takes:
+            take_date = take.created_at.date()
+            takes_by_date[take_date] = takes_by_date.get(take_date, 0) + 1
+        
+        # Fill in all dates
+        while current_date <= end_date:
+            count = takes_by_date.get(current_date, 0)
+            daily_participants_data.append({
+                "date": current_date.strftime("%Y-%m-%d"),
+                "count": count
+            })
+            current_date += timedelta(days=1)
+    
+    return schemas.ExamAnalyticsResponse(
+        exam_id=exam.id,
+        exam_name=exam.name,
+        exam_creator=creator.username if creator else "Unknown",
+        quiz_type=exam.quiz_type,
+        quiz_difficulty=exam.quiz_difficulty,
+        topic=exam.topic,
+        start_page=exam.start_page,
+        end_page=exam.end_page,
+        questions_count=exam.questions_count,
+        created_at=exam.created_at,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        
+        # Participation Statistics
+        total_participants=total_participants,
+        total_completed=total_completed,
+        completion_rate=round(completion_rate, 2),
+        
+        # Score Statistics
+        average_score=round(average_score, 2),
+        median_score=round(median_score, 2),
+        highest_score=round(highest_score, 2),
+        lowest_score=round(lowest_score, 2),
+        std_deviation=round(std_deviation, 2),
+        
+        # Detailed Data
+        participants=participants_data,
+        question_analytics=question_analytics_data,
+        score_distribution=score_distribution_data,
+        daily_participants=daily_participants_data
+    )
