@@ -648,6 +648,23 @@ def delete_question(question_id: int, session: Session = Depends(get_session)):
 
 
 
+@app.get("/exams/{exam_id}/info", response_model=schemas.ExamPublicResponse, dependencies=[Depends(JWTBearer())])
+def get_exam_info(exam_id: int, session: Session = Depends(get_session)):
+    """Get basic exam information including start and end times"""
+    exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    
+    exam_info = schemas.ExamPublicResponse(
+        id=exam.id,
+        name=exam.name,
+        start_time=exam.start_time,
+        end_time=exam.end_time,
+        retake=exam.retake
+    )
+    
+    return exam_info
+
 
 @app.post("/take_exam/{exam_id}", response_model=schemas.TakeExamResponse, dependencies=[Depends(JWTBearer())])
 def take_exam(
@@ -766,4 +783,92 @@ def delete_take(take_id: int, session: Session = Depends(get_session)):
     session.commit()
     return {"message": "Take record deleted"}
 
+
+@app.post("/answers", dependencies=[Depends(JWTBearer())])
+def create_answer(answer: schemas.AnswerCreate, session: Session = Depends(get_session)):
+    new_answer = models.Answers(question_id=answer.question_id, takes_id=answer.takes_id, answer=answer.answer)
+    session.add(new_answer)
+    session.commit()
+    session.refresh(new_answer)
+    return {"message": "Answer created", "answer_id": new_answer.id}
+
+@app.post("/answers/bulk", response_model=schemas.BulkAnswerResponse, dependencies=[Depends(JWTBearer())])
+def submit_bulk_answers(
+    bulk_answers: schemas.BulkAnswerCreate, 
+    session: Session = Depends(get_session),
+    user_id: int = Depends(get_current_user_id)
+):
+    # Verify that the take record exists and belongs to the current user
+    take = session.query(models.Takes).filter(
+        models.Takes.id == bulk_answers.takes_id,
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at.is_(None)
+    ).first()
+    
+    if not take:
+        raise HTTPException(status_code=404, detail="Take record not found or does not belong to you")
+    
+    # Get all question IDs and their correct answers for this exam
+    question_ids = [answer.question_id for answer in bulk_answers.answers]
+    questions = session.query(models.Question).filter(
+        models.Question.id.in_(question_ids),
+        models.Question.exam_id == take.exam_id,
+        models.Question.deleted_at.is_(None)
+    ).all()
+    
+    if len(questions) != len(question_ids):
+        raise HTTPException(status_code=404, detail="One or more questions not found")
+    
+    # Create a mapping of question_id to correct_answer for quick lookup
+    correct_answers_map = {q.id: q.correct_answer for q in questions}
+    
+    # Calculate correct answers and store individual answers
+    correct_count = 0
+    for answer_item in bulk_answers.answers:
+        # Create individual answer record
+        new_answer = models.Answers(
+            question_id=answer_item.question_id,
+            takes_id=bulk_answers.takes_id,
+            answer=answer_item.answer,
+            created_at=datetime.utcnow()
+        )
+        session.add(new_answer)
+        
+        # Check if answer is correct
+        if correct_answers_map.get(answer_item.question_id) == answer_item.answer:
+            correct_count += 1
+    
+    # Update the take record with correct answers count
+    take.correct_answers = correct_count
+    
+    session.commit()
+    
+    return schemas.BulkAnswerResponse(correct_answers=correct_count)
+
+@app.get("/answers/{answer_id}", dependencies=[Depends(JWTBearer())])
+def read_answer(answer_id: int, session: Session = Depends(get_session)):
+    answer = session.query(models.Answers).filter(models.Answers.id == answer_id, models.Answers.deleted_at == None).first()
+    if not answer:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    return answer
+
+@app.put("/answers/{answer_id}", dependencies=[Depends(JWTBearer())])
+def update_answer(answer_id: int, answer_update: schemas.AnswerUpdate, session: Session = Depends(get_session)):
+    answer = session.query(models.Answers).filter(models.Answers.id == answer_id).first()
+    if not answer or answer.deleted_at:
+        raise HTTPException(status_code=404, detail="Answer not found")
+
+    for field, value in answer_update.dict(exclude_unset=True).items():
+        setattr(answer, field, value)
+    session.commit()
+    return {"message": "Answer updated"}
+
+@app.delete("/answers/{answer_id}", dependencies=[Depends(JWTBearer())])
+def delete_answer(answer_id: int, session: Session = Depends(get_session)):
+    answer = session.query(models.Answers).filter(models.Answers.id == answer_id).first()
+    if not answer or answer.deleted_at:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    answer.deleted_at = datetime.utcnow()
+    session.commit()
+    return {"message": "Answer deleted"}
 
