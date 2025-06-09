@@ -872,3 +872,173 @@ def delete_answer(answer_id: int, session: Session = Depends(get_session)):
     session.commit()
     return {"message": "Answer deleted"}
 
+@app.get("/dashboard", response_model=schemas.DashboardResponse, dependencies=[Depends(JWTBearer())])
+def get_dashboard(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get dashboard information for the current user"""
+    
+    # Get total PDF count (uploads)
+    total_pdf = session.query(models.Uploads).filter(
+        models.Uploads.user_id == user_id,
+        models.Uploads.deleted_at.is_(None)
+    ).count()
+    
+    # Get total quiz count (exams created by user)
+    total_quiz = session.query(models.Exam).filter(
+        models.Exam.user_id == user_id,
+        models.Exam.deleted_at.is_(None)
+    ).count()
+    
+    # Get total exam participated count (takes by user)
+    total_exam_participated = session.query(models.Takes).filter(
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at.is_(None)
+    ).count()
+    
+    # Get recent PDFs (top 5 in descending order)
+    recent_pdfs = session.query(models.Uploads).filter(
+        models.Uploads.user_id == user_id,
+        models.Uploads.deleted_at.is_(None)
+    ).order_by(models.Uploads.created_at.desc()).limit(5).all()
+    
+    # Get recent quizzes (top 5 exams in descending order)
+    recent_exams = session.query(models.Exam).filter(
+        models.Exam.user_id == user_id,
+        models.Exam.deleted_at.is_(None)
+    ).order_by(models.Exam.created_at.desc()).limit(5).all()
+    
+    # Transform recent exams to ExamResponse objects
+    recent_quizzes = []
+    for exam in recent_exams:
+        # Count participants (unique users who took this exam)
+        participants_count = session.query(models.Takes).filter(
+            models.Takes.exam_id == exam.id,
+            models.Takes.deleted_at.is_(None)
+        ).count()
+        
+        # Get full upload objects
+        uploads = [schemas.UploadResponse(
+            id=upload.id,
+            user_id=upload.user_id,
+            url=upload.url,
+            processing_state=upload.processing_state,
+            pdf_id=upload.pdf_id,
+            pages=upload.pages,
+            pdf_name=upload.pdf_name,
+            created_at=upload.created_at,
+            deleted_at=upload.deleted_at
+        ) for upload in exam.uploads if upload.deleted_at is None]
+        
+        exam_response = schemas.ExamResponse(
+            id=exam.id,
+            user_id=exam.user_id,
+            name=exam.name,
+            retake=exam.retake,
+            uploads=uploads,
+            start_time=exam.start_time,
+            end_time=exam.end_time,
+            quiz_type=exam.quiz_type,
+            topic=exam.topic,
+            start_page=exam.start_page,
+            end_page=exam.end_page,
+            processing_state=exam.processing_state,
+            created_at=exam.created_at,
+            deleted_at=exam.deleted_at,
+            questions_count=exam.questions_count,
+            participants_count=participants_count,
+            quiz_difficulty=exam.quiz_difficulty
+        )
+        recent_quizzes.append(exam_response)
+    
+    return schemas.DashboardResponse(
+        total_pdf=total_pdf,
+        total_quiz=total_quiz,
+        total_exam_participated=total_exam_participated,
+        recent_pdfs=recent_pdfs,
+        recent_quizzes=recent_quizzes
+    )
+
+
+
+@app.get("/dashboard/takes", response_model=schemas.UserDashboardResponse, dependencies=[Depends(JWTBearer())])
+def get_user_takes_dashboard(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get user's exam takes information for dashboard"""
+    
+    # Get all takes by the user with exam information
+    user_takes = session.query(models.Takes).join(
+        models.Exam, models.Takes.exam_id == models.Exam.id
+    ).filter(
+        models.Takes.user_id == user_id,
+        models.Takes.deleted_at.is_(None),
+        models.Exam.deleted_at.is_(None)
+    ).order_by(models.Takes.correct_answers.desc()).all()
+    
+    if not user_takes:
+        return schemas.UserDashboardResponse(
+            total_exams=0,
+            avg_score=0.0,
+            best_score=0.0,
+            takes=[]
+        )
+    
+    # Calculate total exams, avg score, and best score
+    total_exams = len(user_takes)
+    scores = []
+    takes_details = []
+    
+    for take in user_takes:
+        exam = take.exam
+        
+        # Get total questions for this exam to calculate percentage
+        total_questions = exam.questions_count
+        correct_answers = take.correct_answers or 0
+        score_percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0
+        scores.append(score_percentage)
+        
+        # Get ranking and total participants for this exam
+        all_takes_for_exam = session.query(models.Takes).filter(
+            models.Takes.exam_id == exam.id,
+            models.Takes.deleted_at.is_(None),
+            models.Takes.correct_answers.is_not(None)
+        ).order_by(models.Takes.correct_answers.desc()).all()
+        
+        total_participants = len(all_takes_for_exam)
+        
+        # Find user's ranking (1-based)
+        ranking = 1
+        for idx, exam_take in enumerate(all_takes_for_exam):
+            if exam_take.id == take.id:
+                ranking = idx + 1
+                break
+        
+        # Create take detail
+        take_detail = schemas.UserTakeDetail(
+            id=take.id,
+            quiz_name=exam.name,
+            quiz_difficulty=exam.quiz_difficulty,
+            quiz_type=exam.quiz_type,
+            quiz_created_at=exam.created_at,
+            correct_answers=correct_answers,
+            ranking=ranking,
+            total_participants=total_participants,
+            total_questions=exam.questions_count,
+            start_time=exam.start_time,
+            end_time=exam.end_time
+        )
+        takes_details.append(take_detail)
+    
+    # Calculate averages
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    best_score = max(scores) if scores else 0.0
+    
+    return schemas.UserDashboardResponse(
+        total_exams=total_exams,
+        avg_score=round(avg_score, 2),
+        best_score=round(best_score, 2),
+        takes=takes_details
+    )

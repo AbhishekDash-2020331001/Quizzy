@@ -410,3 +410,25 @@ class DetailedTakeResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ----- Dashboard Schemas -----
+class DashboardResponse(BaseModel):
+    total_pdf: int
+    total_quiz: int
+    total_exam_participated: int
+    recent_pdfs: List[UploadResponse]
+    recent_quizzes: List[ExamResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class UserDashboardResponse(BaseModel):
+    total_exams: int
+    avg_score: float
+    best_score: float
+    takes: List[UserTakeDetail]
+
+    class Config:
+        from_attributes = True
