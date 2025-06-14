@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, FileQuestion, Target, Award } from "lucide-react";
+import { Trophy, FileQuestion, Target } from "lucide-react";
 
 const stats = [
   {
@@ -23,33 +23,23 @@ const stats = [
     color: "text-yellow-600",
     bgColor: "bg-yellow-100",
   },
-  {
-    title: "Completion Rate",
-    value: "92%",
-    icon: Award,
-    color: "text-orange-600",
-    bgColor: "bg-orange-100",
-  },
 ];
 
 export function ExamsOverview({
   total_exams,
   avg_score,
   best_score,
-  completion_rate = 77,
 }: {
   total_exams: number;
   avg_score: number;
   best_score: number;
-  completion_rate?: number;
 }) {
   stats[0].value = total_exams.toString();
   stats[1].value = avg_score.toString() + "%";
   stats[2].value = best_score.toString() + "%";
-  stats[3].value = completion_rate.toString() + "%";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {stats.map((stat, index) => (
         <Card
           key={index}

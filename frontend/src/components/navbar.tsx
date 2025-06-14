@@ -86,6 +86,7 @@ export const Navbar = ({
                 "/dashboard/quizzes",
                 "/dashboard/PDFs",
                 "/dashboard/exams",
+                "/dashboard/credits",
               ].map((href) => (
                 <Link
                   key={href}
@@ -109,7 +110,7 @@ export const Navbar = ({
                     method: "GET",
                   });
                   toast.success("Logged out");
-                  router.refresh();
+                  router.push("/signin");
                 }}
                 className="hover:text-primary transition-all duration-200 ml-10"
               >
@@ -181,6 +182,12 @@ export const Navbar = ({
                 >
                   Exams
                 </Link>
+                <Link
+                  href="/dashboard/credits"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Credits
+                </Link>
                 <Button
                   variant={"outline"}
                   size={"icon"}
@@ -189,7 +196,7 @@ export const Navbar = ({
                       method: "GET",
                     });
                     toast.success("Logged out");
-                    router.refresh();
+                    router.push("/signin");
                   }}
                 >
                   Logout

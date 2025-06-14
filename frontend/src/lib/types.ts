@@ -1,3 +1,12 @@
+export type PaymentHistoryType = {
+  id: number;
+  created_at: string;
+  completed_at: string | null;
+  amount: number;
+  credit_purchased: number;
+  status: string;
+};
+
 export type UploadType = {
   id: number;
   user_id: number;
@@ -16,6 +25,7 @@ export type DashboardInfoType = {
   total_exam_participated: number;
   recent_pdfs: UploadType[];
   recent_quizzes: QuizType[];
+  credits: number;
 };
 
 export type QuestionType = {

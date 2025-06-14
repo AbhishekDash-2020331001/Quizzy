@@ -7,7 +7,6 @@ import {
   FileQuestion,
   Users,
   MoreHorizontal,
-  Play,
   Share2,
   Edit,
   Copy,
@@ -134,11 +133,6 @@ export function QuizList({ quizzes }: { quizzes: QuizType[] }) {
 
                 {/* Right Actions */}
                 <div className="flex items-center gap-2">
-                  <Button size="sm">
-                    <Play className="h-4 w-4 mr-2" />
-                    Start
-                  </Button>
-
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm">

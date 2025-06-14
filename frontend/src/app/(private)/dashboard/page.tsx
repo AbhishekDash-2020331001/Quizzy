@@ -34,7 +34,7 @@ export default async function DashboardPage() {
           total_pdfs={dashboardInfo.data.total_pdf}
           total_quizzes={dashboardInfo.data.total_quiz}
           total_exam_paticipated={dashboardInfo.data.total_exam_participated}
-          total_credits={0}
+          total_credits={dashboardInfo.data.credits}
         />
 
         {/* Quick Actions */}

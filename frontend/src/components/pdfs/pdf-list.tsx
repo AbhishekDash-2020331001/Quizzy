@@ -3,13 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  FileText,
-  MoreHorizontal,
-  Download,
-  Trash2,
-  FileQuestion,
-} from "lucide-react";
+import { FileText, MoreHorizontal, Download, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,12 +85,6 @@ export function PDFList({ uploads }: { uploads: UploadType[] }) {
                       <FileText className="h-4 w-4 text-gray-400" />
                       <span className="text-gray-600">
                         {upload.pages || 0} pages
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <FileQuestion className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-600">
-                        {upload.pages || 0} quizzes
                       </span>
                     </div>
                   </div>
