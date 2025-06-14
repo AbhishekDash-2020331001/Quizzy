@@ -12,6 +12,7 @@ import { PdfReferenceModal } from "./pdf-reference-modal";
 import { listUploadsAction } from "@/action/uploads.action";
 import { UploadType } from "@/lib/types";
 import { PdfReference } from "@/hooks/use-chat-store"; // Import PdfReference
+import { AI_URL } from "@/lib/data";
 
 interface ChatInterfaceProps {
   chatId: string;
@@ -27,7 +28,8 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null); // Ref for ScrollArea component
 
-  const { chats, addMessage, updateMessage, updateChatPdfReferences } = useChatStore(); // Added updateChatPdfReferences
+  const { chats, addMessage, updateMessage, updateChatPdfReferences } =
+    useChatStore(); // Added updateChatPdfReferences
   const currentChat = chats.find((chat) => chat.id === chatId);
 
   useEffect(() => {
@@ -64,7 +66,9 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
     const scrollAreaRoot = scrollAreaRef.current;
     if (scrollAreaRoot) {
       // For shadcn/ui ScrollArea, the viewport is a child with a specific data attribute
-      const viewport = scrollAreaRoot.querySelector('[data-radix-scroll-area-viewport]') as HTMLDivElement;
+      const viewport = scrollAreaRoot.querySelector(
+        "[data-radix-scroll-area-viewport]"
+      ) as HTMLDivElement;
       if (viewport) {
         const { scrollHeight, scrollTop, clientHeight } = viewport;
         // If the user is within SCROLL_THRESHOLD of the bottom, then scroll.
@@ -97,7 +101,7 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
       name: pdf.pdf_name,
     };
     const currentReferences = currentChat?.pdfReferences || [];
-    if (!currentReferences.find(ref => ref.id === reference.id)) {
+    if (!currentReferences.find((ref) => ref.id === reference.id)) {
       updateChatPdfReferences(chatId, [...currentReferences, reference]);
     }
     setShowPdfModal(false);
@@ -105,7 +109,10 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
 
   const removePdfReference = (id: string) => {
     const currentReferences = currentChat?.pdfReferences || [];
-    updateChatPdfReferences(chatId, currentReferences.filter((ref) => ref.id !== id));
+    updateChatPdfReferences(
+      chatId,
+      currentReferences.filter((ref) => ref.id !== id)
+    );
   };
 
   const handleSendMessage = async () => {
@@ -144,14 +151,8 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
         conversation_history: conversationHistory.slice(0, -2),
       };
 
-      console.log(
-        "Making request to:",
-        "http://localhost:8001/pdf/chat/stream"
-      );
-      console.log("Request data:", requestData);
-
       // Make streaming request
-      const response = await fetch("http://localhost:8001/pdf/chat/stream", {
+      const response = await fetch(`${AI_URL}/pdf/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -275,7 +276,9 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
   }; // This is the correct end of handleSendMessage
 
   return (
-    <div className="flex flex-col flex-1 bg-gray-50 overflow-hidden p-4 gap-3"> {/* Changed h-full to h-screen and added bg color */}
+    <div className="flex flex-col flex-1 bg-gray-50 overflow-hidden p-4 gap-3">
+      {" "}
+      {/* Changed h-full to h-screen and added bg color */}
       {/* Chat Header */}
       <div className="p-3 border-b border-gray-200 bg-white shadow-sm sticky top-0 z-10">
         {/* Chat Title Row */}
@@ -289,7 +292,9 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
         {/* PDF References Section */}
         {currentChat?.pdfReferences && currentChat.pdfReferences.length > 0 && (
           <div className="mb-1">
-            <h3 className="text-xs font-medium text-gray-500 mb-1">Active PDF References:</h3>
+            <h3 className="text-xs font-medium text-gray-500 mb-1">
+              Active PDF References:
+            </h3>
             <div className="flex flex-wrap gap-2 mt-1">
               {currentChat.pdfReferences.map((ref) => (
                 <Badge
@@ -312,9 +317,13 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
           </div>
         )}
       </div>
-
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4 bg-gray-100 min-h-0 rounded-md" ref={scrollAreaRef}> {/* Added bg color to message area */}
+      <ScrollArea
+        className="flex-1 p-4 bg-gray-100 min-h-0 rounded-md"
+        ref={scrollAreaRef}
+      >
+        {" "}
+        {/* Added bg color to message area */}
         <div className="space-y-4">
           {currentChat?.messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
@@ -322,13 +331,16 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
         </div>
         <div ref={messagesEndRef} />
       </ScrollArea>
-
       {/* Input Area */}
-      <div className="p-3 border-t border-gray-200 bg-white sticky bottom-0 z-10 shadow-t"> {/* Adjusted padding, sticky, shadow */}
-        <div className="flex items-end gap-2"> {/* items-end for better alignment with multi-line textarea */}
-          <Button 
-            variant="outline" 
-            size="icon" 
+      <div className="p-3 border-t border-gray-200 bg-white sticky bottom-0 z-10 shadow-t">
+        {" "}
+        {/* Adjusted padding, sticky, shadow */}
+        <div className="flex items-end gap-2">
+          {" "}
+          {/* items-end for better alignment with multi-line textarea */}
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => setShowPdfModal(true)}
             className="flex-shrink-0 border-gray-300 hover:bg-gray-100"
             aria-label="Attach PDF"
@@ -345,7 +357,7 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
             rows={1} // Start with 1 row, auto-expands with content
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'inherit';
+              target.style.height = "inherit";
               target.style.height = `${target.scrollHeight}px`;
             }}
           />
@@ -356,11 +368,14 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
             className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-md w-10 h-10"
             aria-label="Send message"
           >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
           </Button>
         </div>
       </div>
-
       {/* PDF Reference Modal */}
       <PdfReferenceModal
         isOpen={showPdfModal}
