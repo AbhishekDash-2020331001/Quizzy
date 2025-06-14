@@ -1,3 +1,5 @@
+![Quizzy Logo](images/logo.png)
+
 # 📘 Quizzy – Intelligent Quiz Generation Platform
 
 **Quizzy** is an advanced, AI-powered platform for creating and managing quizzes from PDF documents. It unifies two backend systems into a single seamless frontend experience, enabling users to generate MCQs using traditional text analysis or interactively through Retrieval-Augmented Generation (RAG) with OpenAI.
@@ -19,17 +21,20 @@ Quizzy/
 
 ---
 
+![Quizzy Home](images/home.png)
+
 ## 🚀 Key Features
 
-* 📄 Upload and manage PDFs
-* 🧠 Generate quizzes using:
+- 📄 Upload and manage PDFs
+- 🧠 Generate quizzes using:
 
-  * Traditional MCQ generation (from full PDF text)
-  * RAG (Retrieval-Augmented Generation) with GPT
-* 🤖 Chat with PDF content
-* 📥 Download quizzes and answers
-* 🔒 User authentication (JWT-based)
-* 📡 Real-time job status and webhook notifications
+  - Traditional MCQ generation (from full PDF text)
+  - RAG (Retrieval-Augmented Generation) with GPT
+
+- 🤖 Chat with PDF content
+- 📥 Download quizzes and answers
+- 🔒 User authentication (JWT-based)
+- 📡 Real-time job status and webhook notifications
 
 ---
 
@@ -70,8 +75,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-> API available at: `http://localhost:8001`
-> [Full backend docs here](quiz-generator-api/README.md)
+> API available at: `http://localhost:8001` > [Full backend docs here](quiz-generator-api/README.md)
 
 ---
 
@@ -88,8 +92,7 @@ uvicorn app.main:app --reload
 python worker.py  # In another terminal
 ```
 
-> API available at: `http://localhost:8000`
-> [Full backend docs here](rag-quiz-system/README.md)
+> API available at: `http://localhost:8000` > [Full backend docs here](rag-quiz-system/README.md)
 
 ---
 
@@ -127,4 +130,3 @@ Frontend will run on: `http://localhost:3000`
 | Topic/Page-based Quiz      | RAG Quiz System    |
 | Job Queue + Webhooks       | RAG Quiz System    |
 | View, Download Quizzes     | Frontend           |
-
