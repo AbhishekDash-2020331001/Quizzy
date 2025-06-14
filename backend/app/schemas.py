@@ -128,6 +128,17 @@ class ExamInfoResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class QuestionEditData(BaseModel):
+    id: Optional[int] = None  # None for new questions, actual ID for existing questions
+    text: str
+    option_1: str
+    option_2: str
+    option_3: str
+    option_4: str
+    correct_answer: Literal['1', '2', '3', '4']
+    explanation: str
+
+
 class ExamUpdate(BaseModel):
     name: Optional[str] = None
     retake: Optional[bool] = None
