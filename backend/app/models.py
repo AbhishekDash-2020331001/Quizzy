@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime,Boolean, ForeignKey, Text, Enum, Table
+from sqlalchemy import Column, Integer, String, DateTime,Boolean, ForeignKey, Text, Enum, Table, Float
 from .database import Base
 from sqlalchemy.orm import relationship
 import datetime
@@ -11,10 +11,12 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)
     teacher = Column(Boolean, default=False)
+    credits = Column(Float, default=10.0, nullable=False)
     
     exams = relationship("Exam", back_populates="creator", cascade="all, delete")
     uploads = relationship("Uploads", back_populates="uploader", cascade="all, delete")
-    takes = relationship("Takes", back_populates="user", cascade="all, delete") 
+    takes = relationship("Takes", back_populates="user", cascade="all, delete")
+    payments = relationship("Payment", back_populates="user", cascade="all, delete") 
 
 
 class TokenTable(Base):
@@ -117,3 +119,16 @@ class Answers(Base):
 
     question = relationship("Question", back_populates="answers")
     takes = relationship("Takes", back_populates="answers")
+
+class Payment(Base):
+    __tablename__ = 'payments'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    stripe_payment_intent_id = Column(String(450), unique=True, nullable=False)
+    amount = Column(Float, nullable=False)
+    credits_purchased = Column(Float, nullable=False)
+    status = Column(Enum("pending", "completed", "failed", "canceled"), default="pending", nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="payments")

@@ -2,7 +2,7 @@ from datetime import datetime
 from . import schemas
 from . import models
 from . import database
-from fastapi import FastAPI, Depends, HTTPException, status, Path
+from fastapi import FastAPI, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from passlib.context import CryptContext
@@ -19,12 +19,20 @@ import os
 import uvicorn
 import httpx
 import asyncio
+import stripe
+import json
+import math
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 10800
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 ALGORITHM = "HS256"
 JWT_SECRET_KEY = "narscbjim@$@&^@&%^&RFghgjvbdsha"
 JWT_REFRESH_SECRET_KEY = "13ugfdfgh@#$%^@&jkl45678902"
+
+# Stripe configuration
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_...")  # Replace with your actual secret key
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_...")  # Replace with your webhook secret
+stripe.api_key = STRIPE_SECRET_KEY
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -53,6 +61,10 @@ def get_current_user_id(token: str = Depends(JWTBearer())):
         return user_id
     except (JWTError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def calculate_credits_needed(questions_count: int) -> float:
+    """Calculate credits needed based on number of questions. 1 credit per 10 questions."""
+    return questions_count / 10.0
 
 async def send_to_processing_server(uploadthing_url: str, pdf_name: str, upload_id: int):
     """Send upload details to the processing server"""
@@ -179,6 +191,17 @@ async def create_exam(
     if exam.quiz_type == "page_range" and (not exam.start_page or not exam.end_page):
         raise HTTPException(status_code=400, detail="Start page and end page are required for page range-based exams")
     
+        # Check user credits before proceeding
+    user = session.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    credits_needed = calculate_credits_needed(exam.questions_count)
+    if user.credits < credits_needed:
+        raise HTTPException(
+            status_code=402, 
+            detail=f"Insufficient credits. Required: {credits_needed}, Available: {user.credits}"
+        )
 
     uploads = session.query(models.Uploads).filter(
         models.Uploads.id.in_(exam.upload_ids),
@@ -208,6 +231,9 @@ async def create_exam(
         processing_state=0
     )
     new_exam.uploads = uploads
+    
+    # Deduct credits from user
+    user.credits -= credits_needed
 
     session.add(new_exam)
     session.commit()
@@ -901,6 +927,10 @@ def get_dashboard(
         models.Takes.deleted_at.is_(None)
     ).count()
     
+    credits = session.query(models.User).filter(
+        models.User.id == user_id
+    ).first().credits
+
     # Get recent PDFs (top 5 in descending order)
     recent_pdfs = session.query(models.Uploads).filter(
         models.Uploads.user_id == user_id,
@@ -960,6 +990,7 @@ def get_dashboard(
         total_pdf=total_pdf,
         total_quiz=total_quiz,
         total_exam_participated=total_exam_participated,
+        credits=credits,
         recent_pdfs=recent_pdfs,
         recent_quizzes=recent_quizzes
     )
@@ -1673,3 +1704,148 @@ def get_user_overall_analytics(
         strengths_weaknesses=strengths_weaknesses,
         recent_exams=recent_exams
     )
+
+# ----- Payment Endpoints -----
+
+@app.get("/credits/balance", response_model=schemas.CreditBalance, dependencies=[Depends(JWTBearer())])
+def get_credit_balance(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get the current user's credit balance"""
+    user = session.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return schemas.CreditBalance(credits=user.credits)
+
+@app.post("/payments/create-intent", response_model=schemas.PaymentIntentResponse, dependencies=[Depends(JWTBearer())])
+def create_payment_intent(
+    payment_data: schemas.PaymentIntentCreate,
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Create a Stripe payment intent for purchasing credits"""
+    try:
+        # Validate user exists
+        user = session.query(models.User).filter(models.User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Validate amount (minimum $1, maximum $1000 per transaction)
+        if payment_data.amount < 1 or payment_data.amount > 1000:
+            raise HTTPException(status_code=400, detail="Amount must be between $1 and $1000")
+        
+        # Calculate credits to purchase (1:1 ratio)
+        credits_to_purchase = float(payment_data.amount)
+        
+        # Create Stripe payment intent
+        intent = stripe.PaymentIntent.create(
+            amount=int(payment_data.amount * 100),  # Convert to cents
+            currency=payment_data.currency,
+            metadata={
+                "user_id": str(user_id),
+                "credits_to_purchase": str(credits_to_purchase)
+            }
+        )
+        
+        # Create payment record in database
+        payment_record = models.Payment(
+            user_id=user_id,
+            stripe_payment_intent_id=intent.id,
+            amount=payment_data.amount,
+            credits_purchased=credits_to_purchase,
+            status="pending"
+        )
+        session.add(payment_record)
+        session.commit()
+        
+        return schemas.PaymentIntentResponse(
+            client_secret=intent.client_secret,
+            payment_intent_id=intent.id,
+            amount=payment_data.amount,
+            credits_to_purchase=credits_to_purchase
+        )
+        
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=f"Stripe error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/payments/webhook")
+async def stripe_webhook(
+    request: Request,
+    session: Session = Depends(get_session)
+):
+    """Handle Stripe webhook events"""
+    payload = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    # Handle payment intent succeeded event
+    if event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']
+        
+        # Find the payment record
+        payment = session.query(models.Payment).filter(
+            models.Payment.stripe_payment_intent_id == payment_intent['id']
+        ).first()
+        
+        if payment:
+            # Update payment status
+            payment.status = "completed"
+            payment.completed_at = datetime.utcnow()
+            
+            # Add credits to user
+            user = session.query(models.User).filter(models.User.id == payment.user_id).first()
+            if user:
+                user.credits += payment.credits_purchased
+            
+            session.commit()
+    
+    elif event['type'] == 'payment_intent.payment_failed':
+        payment_intent = event['data']['object']
+        
+        # Find the payment record
+        payment = session.query(models.Payment).filter(
+            models.Payment.stripe_payment_intent_id == payment_intent['id']
+        ).first()
+        
+        if payment:
+            payment.status = "failed"
+            session.commit()
+    
+    return {"status": "success"}
+
+@app.get("/payments/history", response_model=List[schemas.PaymentResponse], dependencies=[Depends(JWTBearer())])
+def get_payment_history(
+    user_id: int = Depends(get_current_user_id),
+    session: Session = Depends(get_session)
+):
+    """Get the current user's payment history"""
+    payments = session.query(models.Payment).filter(
+        models.Payment.user_id == user_id
+    ).order_by(models.Payment.created_at.desc()).all()
+    
+    return payments
+
+@app.get("/credits/calculate")
+def calculate_credits_for_questions(questions_count: int):
+    """Calculate how many credits are needed for a given number of questions"""
+    if questions_count <= 0:
+        raise HTTPException(status_code=400, detail="Questions count must be positive")
+    
+    credits_needed = calculate_credits_needed(questions_count)
+    return {
+        "questions_count": questions_count,
+        "credits_needed": round(credits_needed, 2),
+        "rate": "0.1 credits per question (1 credit per 10 questions)"
+    }

@@ -14,6 +14,7 @@ class UserResponse(BaseModel):
     created_at: datetime.datetime
     deleted_at: datetime.datetime | None = None # deleted_at can be None if the user has not deleted their account
     teacher: bool
+    credits: float
     
     class Config:
         from_attributes = True 
@@ -378,6 +379,7 @@ class DashboardResponse(BaseModel):
     total_pdf: int
     total_quiz: int
     total_exam_participated: int
+    credits: int
     recent_pdfs: List[UploadResponse]
     recent_quizzes: List[ExamResponse]
 
@@ -534,3 +536,40 @@ class UserOverallAnalyticsResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+# ----- Payment Schemas -----
+class PaymentIntentCreate(BaseModel):
+    amount: float  # Amount in dollars
+    currency: str = "usd"
+
+class PaymentIntentResponse(BaseModel):
+    client_secret: str
+    payment_intent_id: str
+    amount: float
+    credits_to_purchase: float
+
+class PaymentWebhookData(BaseModel):
+    payment_intent_id: str
+    status: str
+    amount_received: Optional[float] = None
+
+class PaymentResponse(BaseModel):
+    id: int
+    user_id: int
+    stripe_payment_intent_id: str
+    amount: float
+    credits_purchased: float
+    status: str
+    created_at: datetime.datetime
+    completed_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class CreditBalance(BaseModel):
+    credits: float
+    
+class InsufficientCreditsError(BaseModel):
+    detail: str
+    required_credits: float
+    available_credits: float
