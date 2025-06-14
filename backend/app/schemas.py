@@ -379,7 +379,7 @@ class DashboardResponse(BaseModel):
     total_pdf: int
     total_quiz: int
     total_exam_participated: int
-    credits: int
+    credits: float
     recent_pdfs: List[UploadResponse]
     recent_quizzes: List[ExamResponse]
 
@@ -539,8 +539,8 @@ class UserOverallAnalyticsResponse(BaseModel):
 
 # ----- Payment Schemas -----
 class PaymentIntentCreate(BaseModel):
-    amount: float  # Amount in dollars
-    currency: str = "usd"
+    amount: float 
+    currency: str = "bdt" 
 
 class PaymentIntentResponse(BaseModel):
     client_secret: str

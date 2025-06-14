@@ -1,7 +1,6 @@
 from datetime import datetime
 from . import schemas
 from . import models
-from . import database
 from fastapi import FastAPI, Depends, HTTPException, status, Path, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -9,30 +8,33 @@ from passlib.context import CryptContext
 from .database import Base, engine, SessionLocal
 from .auth_bearer import JWTBearer
 from .utils import create_access_token, create_refresh_token, verify_password, get_hashed_password
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from typing import List
 import os
-import uvicorn
 import httpx
 import asyncio
 import stripe
-import json
-import math
+from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 10800
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 ALGORITHM = "HS256"
-JWT_SECRET_KEY = "narscbjim@$@&^@&%^&RFghgjvbdsha"
-JWT_REFRESH_SECRET_KEY = "13ugfdfgh@#$%^@&jkl45678902"
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "example_key")
+JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", "example_key")
 
 # Stripe configuration
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "sk_test_...")  # Replace with your actual secret key
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_...")  # Replace with your webhook secret
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "example_key") 
+
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "example_key")
 stripe.api_key = STRIPE_SECRET_KEY
+
+if not STRIPE_SECRET_KEY:
+    print("WARNING: STRIPE_SECRET_KEY is not set!")
+else:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -44,6 +46,15 @@ def get_session():
         session.close()
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://quizzy.vercel.app", "http://localhost:3000", "http://quizzy.vercel.app"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -1732,17 +1743,25 @@ def create_payment_intent(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Validate amount (minimum $1, maximum $1000 per transaction)
-        if payment_data.amount < 1 or payment_data.amount > 1000:
-            raise HTTPException(status_code=400, detail="Amount must be between $1 and $1000")
+        if not payment_data.currency:
+            raise HTTPException(status_code=400, detail="Currency is required")
+        elif payment_data.currency.lower() == "usd":
+            if payment_data.amount < 1:
+                raise HTTPException(status_code=400, detail="Amount must be at least $1.00 USD")
+        elif payment_data.currency.lower() == "bdt":
+            if payment_data.amount < 100:
+                raise HTTPException(status_code=400, detail="Amount must be at least ৳100 BDT")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported currency. Only USD and BDT are supported")
         
         # Calculate credits to purchase (1:1 ratio)
-        credits_to_purchase = float(payment_data.amount)
+        credits_to_purchase = float(payment_data.amount / 100)
+        stripe_amount = int(payment_data.amount * 100)
         
         # Create Stripe payment intent
         intent = stripe.PaymentIntent.create(
-            amount=int(payment_data.amount * 100),  # Convert to cents
-            currency=payment_data.currency,
+            amount=stripe_amount,
+            currency=payment_data.currency.lower(),
             metadata={
                 "user_id": str(user_id),
                 "credits_to_purchase": str(credits_to_purchase)

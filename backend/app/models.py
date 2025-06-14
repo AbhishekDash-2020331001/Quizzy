@@ -11,7 +11,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)
     teacher = Column(Boolean, default=False)
-    credits = Column(Float, default=10.0, nullable=False)
+    credits = Column(Float, default=3.0, nullable=False)
     
     exams = relationship("Exam", back_populates="creator", cascade="all, delete")
     uploads = relationship("Uploads", back_populates="uploader", cascade="all, delete")
