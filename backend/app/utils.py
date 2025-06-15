@@ -2,7 +2,10 @@ import os
 from passlib.context import CryptContext
 from typing import Union, Any
 from jose import jwt
-from datetime import datetime, timedelta, timezone  
+from datetime import datetime, timedelta, timezone
+
+# Define UTC+6 timezone (Bangladesh Standard Time)
+UTC_PLUS_6 = timezone(timedelta(hours=6))
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 10800  
 REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  
@@ -23,9 +26,9 @@ def verify_password(password: str, hashed_pass: str) -> bool:
 
 def create_access_token(subject: Union[str, Any], expires_delta: int = None) -> str:
     if expires_delta is not None:
-        expires_delta = datetime.now(timezone.utc) + expires_delta  
+        expires_delta = datetime.now(UTC_PLUS_6) + expires_delta  
     else:
-        expires_delta = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta = datetime.now(UTC_PLUS_6) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode = {"exp": expires_delta, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, ALGORITHM)
@@ -35,9 +38,9 @@ def create_access_token(subject: Union[str, Any], expires_delta: int = None) -> 
 
 def create_refresh_token(subject: Union[str, Any], expires_delta: int = None) -> str:
     if expires_delta is not None:
-        expires_delta = datetime.now(timezone.utc) + expires_delta  
+        expires_delta = datetime.now(UTC_PLUS_6) + expires_delta  
     else:
-        expires_delta = datetime.now(timezone.utc) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
+        expires_delta = datetime.now(UTC_PLUS_6) + timedelta(minutes=REFRESH_TOKEN_EXPIRE_MINUTES)
 
     to_encode = {"exp": expires_delta, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, JWT_REFRESH_SECRET_KEY, ALGORITHM)

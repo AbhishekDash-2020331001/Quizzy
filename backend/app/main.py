@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from . import schemas
 from . import models
 from fastapi import FastAPI, Depends, HTTPException, status, Path, Request
@@ -16,6 +16,9 @@ import asyncio
 import stripe
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+
+# Define UTC+6 timezone (Bangladesh Standard Time)
+UTC_PLUS_6 = timezone(timedelta(hours=6))
 
 load_dotenv()
 
@@ -170,7 +173,7 @@ def delete_user(user_id: int, session: Session = Depends(get_session)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # Set the deleted_at field to the current time when user deletes their account
-    user.deleted_at = datetime.now(timezone.utc)
+    user.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
 
     return {"message": "User account deleted successfully"}
@@ -227,8 +230,8 @@ async def create_exam(
         if not upload.pdf_id:
             raise HTTPException(status_code=400, detail=f"Upload {upload.id} has not been processed yet")
 
-    exam.start_time = exam.start_time.astimezone(timezone.utc)
-    exam.end_time = exam.end_time.astimezone(timezone.utc)
+    exam.start_time = exam.start_time.astimezone(UTC_PLUS_6)
+    exam.end_time = exam.end_time.astimezone(UTC_PLUS_6)
 
     new_exam = models.Exam(
         user_id=user_id,
@@ -398,20 +401,24 @@ def update_exam(
     if exam.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to edit this exam")
     
-    # Validate time constraints - cannot set times earlier than current time
-    current_time = datetime.now(timezone.utc)
+    # Convert to UTC+6 and validate time constraints - cannot set times earlier than current time
+    current_time = datetime.now(UTC_PLUS_6)
+    
+    # Convert to UTC+6 only if values are provided
+    if exam_update.start_time:
+        exam_update.start_time = exam_update.start_time.astimezone(UTC_PLUS_6)
+    if exam_update.end_time:
+        exam_update.end_time = exam_update.end_time.astimezone(UTC_PLUS_6)
+
     if exam_update.start_time and exam_update.start_time < current_time:
         raise HTTPException(status_code=400, detail="Start time cannot be earlier than current time")
     if exam_update.end_time and exam_update.end_time < current_time:
         raise HTTPException(status_code=400, detail="End time cannot be earlier than current time")
-    
-    exam_update.start_time = exam_update.start_time.astimezone(timezone.utc)
-    exam_update.end_time = exam_update.end_time.astimezone(timezone.utc)
 
     # Validate that end_time is after start_time
     start_time = exam_update.start_time or exam.start_time
     end_time = exam_update.end_time or exam.end_time
-    
+
     if end_time <= start_time:
         raise HTTPException(status_code=400, detail="End time must be after start time")
     
@@ -443,7 +450,7 @@ def update_exam(
                     option_4=question_data.option_4,
                     correct_answer=question_data.correct_answer,
                     explanation=question_data.explanation,
-                    created_at=datetime.now(timezone.utc)
+                    created_at=datetime.now(UTC_PLUS_6)
                 )
                 session.add(new_question)
             else:
@@ -475,7 +482,7 @@ def update_exam(
                 models.Question.id == question_id
             ).first()
             if question_to_delete:
-                question_to_delete.deleted_at = datetime.now(timezone.utc)
+                question_to_delete.deleted_at = datetime.now(UTC_PLUS_6)
         
         # Update questions_count based on the number of questions provided
         exam.questions_count = len(exam_update.questions)
@@ -490,7 +497,7 @@ def delete_exam(exam_id: int, session: Session = Depends(get_session)):
     exam = session.query(models.Exam).filter(models.Exam.id == exam_id).first()
     if not exam or exam.deleted_at:
         raise HTTPException(status_code=404, detail="Exam not found")
-    exam.deleted_at = datetime.now(timezone.utc)
+    exam.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
     return {"message": "Exam deleted"}
 
@@ -535,7 +542,7 @@ def delete_upload(upload_id: int, session: Session = Depends(get_session)):
     upload = session.query(models.Uploads).filter(models.Uploads.id == upload_id).first()
     if not upload or upload.deleted_at:
         raise HTTPException(status_code=404, detail="Upload not found")
-    upload.deleted_at = datetime.now(timezone.utc)
+    upload.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
     return {"message": "Upload deleted"}
 
@@ -614,7 +621,7 @@ def quiz_generation_callback(
             option_4=q.options[3],
             correct_answer=correct_answer_index,
             explanation=q.explanation,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC_PLUS_6)
         )
         session.add(new_question)
     
@@ -644,7 +651,7 @@ def create_questions(
             option_4=q.option_4,
             correct_answer=q.correct_answer,
             explanation=q.explanation,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC_PLUS_6)
         )
         session.add(new_question)
 
@@ -690,7 +697,7 @@ def delete_question(question_id: int, session: Session = Depends(get_session)):
     question = session.query(models.Question).filter(models.Question.id == question_id).first()
     if not question or question.deleted_at:
         raise HTTPException(status_code=404, detail="Question not found")
-    question.deleted_at = datetime.now(timezone.utc)
+    question.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
     return {"message": "Question deleted"}
 
@@ -728,7 +735,7 @@ def take_exam(
         raise HTTPException(status_code=400, detail="Device ID is required")
 
     # Check if exam is active
-    if exam.start_time > datetime.now(timezone.utc) or exam.end_time < datetime.now(timezone.utc):
+    if exam.start_time > datetime.now(UTC_PLUS_6) or exam.end_time < datetime.now(UTC_PLUS_6):
         raise HTTPException(status_code=400, detail="Exam is not active")
 
 
@@ -752,7 +759,7 @@ def take_exam(
         user_id=user_id,
         correct_answers=0,
         device_id=take_create.device_id,
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(UTC_PLUS_6)
     )
     session.add(new_take)
     session.commit()
@@ -826,7 +833,7 @@ def delete_take(take_id: int, session: Session = Depends(get_session)):
     take = session.query(models.Takes).filter(models.Takes.id == take_id).first()
     if not take or take.deleted_at:
         raise HTTPException(status_code=404, detail="Take record not found")
-    take.deleted_at = datetime.now(timezone.utc)
+    take.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
     return {"message": "Take record deleted"}
 
@@ -878,7 +885,7 @@ def submit_bulk_answers(
             question_id=answer_item.question_id,
             takes_id=bulk_answers.takes_id,
             answer=answer_item.answer,
-            created_at=datetime.now(timezone.utc)
+            created_at=datetime.now(UTC_PLUS_6)
         )
         session.add(new_answer)
         
@@ -916,7 +923,7 @@ def delete_answer(answer_id: int, session: Session = Depends(get_session)):
     answer = session.query(models.Answers).filter(models.Answers.id == answer_id).first()
     if not answer or answer.deleted_at:
         raise HTTPException(status_code=404, detail="Answer not found")
-    answer.deleted_at = datetime.now(timezone.utc)
+    answer.deleted_at = datetime.now(UTC_PLUS_6)
     session.commit()
     return {"message": "Answer deleted"}
 
@@ -1148,7 +1155,7 @@ def get_take_details(
     
     exam = take.exam
     
-    if datetime.now(timezone.utc) < exam.end_time + timedelta(minutes=1):
+    if datetime.now(UTC_PLUS_6) < exam.end_time + timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="The answers are not available yet")
     
     # Get all questions for this exam
@@ -1378,9 +1385,9 @@ def get_exam_analytics(
     daily_participants_data = []
     if takes:
         # Get date range
-        start_date = max(exam.created_at.date(), (datetime.now(timezone.utc) - timedelta(days=30)).date())
+        start_date = max(exam.created_at.date(), (datetime.now(UTC_PLUS_6) - timedelta(days=30)).date())
         current_date = start_date
-        end_date = datetime.now(timezone.utc).date()
+        end_date = datetime.now(UTC_PLUS_6).date()
         
         # Count participants by date
         takes_by_date = {}
@@ -1501,7 +1508,7 @@ def get_user_overall_analytics(
     
     if take_dates:
         # Check current streak from today backwards
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC_PLUS_6).date()
         current_date = today
         
         for i in range(30):  # Check last 30 days
@@ -1828,7 +1835,7 @@ async def stripe_webhook(
         if payment:
             # Update payment status
             payment.status = "completed"
-            payment.completed_at = datetime.now(timezone.utc)
+            payment.completed_at = datetime.now(UTC_PLUS_6)
             
             # Add credits to user
             user = session.query(models.User).filter(models.User.id == payment.user_id).first()
