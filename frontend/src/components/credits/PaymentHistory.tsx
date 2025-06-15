@@ -200,7 +200,9 @@ const PaymentHistory = ({
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <span className="font-medium">{payment.amount}</span>
+                        <span className="font-medium">
+                          {payment.amount / 10}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           credits
                         </span>

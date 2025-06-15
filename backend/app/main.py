@@ -726,16 +726,15 @@ def take_exam(
     session: Session = Depends(get_session),
     user_id: int = Depends(get_current_user_id)
 ):
-    
-    start_time = exam.start_time.replace(tzinfo=bd_tz)
-    end_time = exam.end_time.replace(tzinfo=bd_tz)
-
     # Check if exam exists
     exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
     elif not take_create.device_id:
         raise HTTPException(status_code=400, detail="Device ID is required")
+    
+    start_time = exam.start_time.replace(tzinfo=bd_tz)
+    end_time = exam.end_time.replace(tzinfo=bd_tz)
 
     # Check if exam is active
     if start_time > datetime.now(UTC_PLUS_6) or end_time < datetime.now(UTC_PLUS_6):
@@ -1772,7 +1771,7 @@ def create_payment_intent(
             raise HTTPException(status_code=400, detail="Unsupported currency. Only USD and BDT are supported")
         
         # Calculate credits to purchase (1:1 ratio)
-        credits_to_purchase = float(payment_data.amount / 100)
+        credits_to_purchase = float(payment_data.amount / 10)
         stripe_amount = int(payment_data.amount * 100)
         
         # Create Stripe payment intent

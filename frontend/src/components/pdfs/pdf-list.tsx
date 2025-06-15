@@ -14,6 +14,7 @@ import {
 import { UploadType } from "@/lib/types";
 import { deleteUploadAction } from "@/action/uploads.action";
 import { toast } from "sonner";
+import { formatDateTime } from "@/utils/date";
 
 export function PDFList({ uploads }: { uploads: UploadType[] }) {
   return (
@@ -90,7 +91,7 @@ export function PDFList({ uploads }: { uploads: UploadType[] }) {
                   </div>
 
                   <div className="text-xs text-gray-500">
-                    Uploaded {upload.created_at}
+                    Uploaded {formatDateTime(upload.created_at)}
                   </div>
                 </div>
 
