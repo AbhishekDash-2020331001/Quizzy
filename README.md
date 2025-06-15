@@ -12,9 +12,9 @@
 Quizzy/
 ├── frontend/                 # Next.js + Tailwind UI
 │   └── README.md             # Frontend setup and usage
-├── quiz-generator-api/      # Backend 1: PDF to MCQ generator
+├── backend/      # Backend 1: PDF to MCQ generator
 │   └── README.md             # FastAPI + MySQL backend details
-├── rag-quiz-system/         # Backend 2: RAG-based chat and quiz gen
+├── AI/         # Backend 2: RAG-based chat and quiz gen
 │   └── README.md             # FastAPI + Redis + OpenAI backend details
 └── README.md                 # ← You are here
 ```
@@ -75,7 +75,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-> API available at: `http://localhost:8001` > [Full backend docs here](quiz-generator-api/README.md)
+> API available at: `http://localhost:8001` > [Full backend docs here](backend/README.md)
 
 ---
 
@@ -92,7 +92,7 @@ uvicorn app.main:app --reload
 python worker.py  # In another terminal
 ```
 
-> API available at: `http://localhost:8000` > [Full backend docs here](rag-quiz-system/README.md)
+> API available at: `http://localhost:8000` > [Full backend docs here](AI/README.md)
 
 ---
 
