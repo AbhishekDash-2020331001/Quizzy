@@ -12,3 +12,5 @@ python-dotenv>=1.0.0
 pydantic>=2.5.0
 numpy>=1.26.0
 tiktoken>=0.5.1
+redis>=5.0.0
+rq>=1.15.0
