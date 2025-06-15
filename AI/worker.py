@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 def create_redis_connection():
     """Create Redis connection using environment variables"""
-    redis_host = os.getenv("REDIS_HOST", "redis")  # Default to 'redis' for Docker
+    redis_host = os.getenv("REDIS_HOST", "localhost")  # Default to 'redis' for Docker
     redis_port = int(os.getenv("REDIS_PORT", 6379))
     redis_db = int(os.getenv("REDIS_DB", 0))
     redis_password = os.getenv("REDIS_PASSWORD", None)

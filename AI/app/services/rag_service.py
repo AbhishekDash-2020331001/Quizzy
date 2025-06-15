@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class RAGService:
     def __init__(self):
-        self.llm = ChatOpenAI(temperature=0.7, model="gpt-o4-mini", streaming=True)
-        self.quiz_llm = ChatOpenAI(temperature=0.3, model="gpt-o4-mini")  # Lower temp for consistent quiz generation
+        self.llm = ChatOpenAI(temperature=0.7, model="gpt-4o-mini", streaming=True)
+        self.quiz_llm = ChatOpenAI(temperature=0.3, model="gpt-4o-mini")  # Lower temp for consistent quiz generation
         self.vector_service = VectorService()
         self.pdf_service = PDFService()
         
