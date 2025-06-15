@@ -75,7 +75,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-> API available at: `http://localhost:8001` > [Full backend docs here](backend/README.md)
+> API available at: `http://localhost:8001` > [Full backend docs here](backend/readme.md)
 
 ---
 
