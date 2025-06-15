@@ -1,3 +1,4 @@
+from backend.app.main import UTC_PLUS_6
 from sqlalchemy import Column, Integer, String, DateTime,Boolean, ForeignKey, Text, Enum, Table, Float
 from .database import Base
 from sqlalchemy.orm import relationship
@@ -8,7 +9,7 @@ class User(Base):
     username = Column(String(50),  nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     password = Column(String(100), unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
     teacher = Column(Boolean, default=False)
     credits = Column(Float, default=3.0, nullable=False)
@@ -25,7 +26,7 @@ class TokenTable(Base):
     access_token = Column(String(450), primary_key=True)
     refresh_token = Column(String(450),nullable=False)
     status = Column(Boolean)
-    created_date = Column(DateTime, default=datetime.datetime.now)
+    created_date = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
 
 exam_upload_association = Table(
     'exam_upload_association',
@@ -43,7 +44,7 @@ class Uploads(Base):
     pdf_id = Column(String(450), nullable=True)
     pages = Column(Integer, nullable=True)
     pdf_name = Column(String(450), nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
 
     uploader = relationship("User", back_populates="uploads")
@@ -64,7 +65,7 @@ class Exam(Base):
     topic = Column(String(450), nullable=True)
     start_page = Column(Integer, nullable=True)
     end_page = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
     processing_state = Column(Integer, default=0)
     quiz_difficulty = Column(Enum("easy", "medium", "hard"), nullable=True, default="medium")
@@ -87,7 +88,7 @@ class Question(Base):
     option_4 = Column(Text)
     correct_answer = Column(Enum('1', '2', '3', '4'), nullable=False)
     explanation = Column(Text)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
 
     exam = relationship("Exam", back_populates="questions")
@@ -101,7 +102,7 @@ class Takes(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     correct_answers = Column(Integer)
     device_id = Column(String(450))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
 
     exam = relationship("Exam", back_populates="takers")
@@ -114,7 +115,7 @@ class Answers(Base):
     question_id = Column(Integer, ForeignKey("question.id", ondelete="CASCADE"), nullable=False)
     takes_id = Column(Integer, ForeignKey("takes.id", ondelete="CASCADE"), nullable=False)
     answer = Column(Enum('1', '2', '3', '4'))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     deleted_at = Column(DateTime, nullable=True)
 
     question = relationship("Question", back_populates="answers")
@@ -128,7 +129,7 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     credits_purchased = Column(Float, nullable=False)
     status = Column(Enum("pending", "completed", "failed", "canceled"), default="pending", nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.now(UTC_PLUS_6))
     completed_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="payments")

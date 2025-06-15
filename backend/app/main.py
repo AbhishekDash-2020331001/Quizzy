@@ -230,9 +230,6 @@ async def create_exam(
         if not upload.pdf_id:
             raise HTTPException(status_code=400, detail=f"Upload {upload.id} has not been processed yet")
 
-    exam.start_time = exam.start_time.astimezone(UTC_PLUS_6)
-    exam.end_time = exam.end_time.astimezone(UTC_PLUS_6)
-
     new_exam = models.Exam(
         user_id=user_id,
         retake=exam.retake,
@@ -403,12 +400,6 @@ def update_exam(
     
     # Convert to UTC+6 and validate time constraints - cannot set times earlier than current time
     current_time = datetime.now(UTC_PLUS_6)
-    
-    # Convert to UTC+6 only if values are provided
-    if exam_update.start_time:
-        exam_update.start_time = exam_update.start_time.astimezone(UTC_PLUS_6)
-    if exam_update.end_time:
-        exam_update.end_time = exam_update.end_time.astimezone(UTC_PLUS_6)
 
     if exam_update.start_time and exam_update.start_time < current_time:
         raise HTTPException(status_code=400, detail="Start time cannot be earlier than current time")
