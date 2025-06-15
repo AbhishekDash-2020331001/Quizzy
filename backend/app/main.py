@@ -16,6 +16,9 @@ import asyncio
 import stripe
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from zoneinfo import ZoneInfo  # For Python 3.9+, else use pytz
+
+bd_tz = ZoneInfo("Asia/Dhaka")
 
 # Define UTC+6 timezone (Bangladesh Standard Time)
 UTC_PLUS_6 = timezone(timedelta(hours=6))
@@ -401,6 +404,11 @@ def update_exam(
     # Convert to UTC+6 and validate time constraints - cannot set times earlier than current time
     current_time = datetime.now(UTC_PLUS_6)
 
+    if exam_update.start_time:
+        exam_update.start_time = exam_update.start_time.replace(tzinfo=bd_tz)
+    if exam_update.end_time:
+        exam_update.end_time = exam_update.end_time.replace(tzinfo=bd_tz)
+
     if exam_update.start_time and exam_update.start_time < current_time:
         raise HTTPException(status_code=400, detail="Start time cannot be earlier than current time")
     if exam_update.end_time and exam_update.end_time < current_time:
@@ -718,6 +726,10 @@ def take_exam(
     session: Session = Depends(get_session),
     user_id: int = Depends(get_current_user_id)
 ):
+    
+    start_time = exam.start_time.replace(tzinfo=bd_tz)
+    end_time = exam.end_time.replace(tzinfo=bd_tz)
+
     # Check if exam exists
     exam = session.query(models.Exam).filter(models.Exam.id == exam_id, models.Exam.deleted_at == None).first()
     if not exam:
@@ -726,7 +738,7 @@ def take_exam(
         raise HTTPException(status_code=400, detail="Device ID is required")
 
     # Check if exam is active
-    if exam.start_time > datetime.now(UTC_PLUS_6) or exam.end_time < datetime.now(UTC_PLUS_6):
+    if start_time > datetime.now(UTC_PLUS_6) or end_time < datetime.now(UTC_PLUS_6):
         raise HTTPException(status_code=400, detail="Exam is not active")
 
 
@@ -1146,7 +1158,7 @@ def get_take_details(
     
     exam = take.exam
     
-    if datetime.now(UTC_PLUS_6) < exam.end_time + timedelta(minutes=1):
+    if datetime.now(UTC_PLUS_6) < exam.end_time.replace(tzinfo=bd_tz) + timedelta(minutes=1):
         raise HTTPException(status_code=400, detail="The answers are not available yet")
     
     # Get all questions for this exam

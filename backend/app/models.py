@@ -1,8 +1,11 @@
-from backend.app.main import UTC_PLUS_6
 from sqlalchemy import Column, Integer, String, DateTime,Boolean, ForeignKey, Text, Enum, Table, Float
 from .database import Base
 from sqlalchemy.orm import relationship
 import datetime
+from datetime import timedelta, timezone
+
+UTC_PLUS_6 = timezone(timedelta(hours=6))
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
